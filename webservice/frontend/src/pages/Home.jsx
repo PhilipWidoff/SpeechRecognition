@@ -1,43 +1,68 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 
 function Home() {
     const [recording, setRecording] = useState(false);
+    const socketRef = useRef(null);
+    const mediaStreamRef = useRef(null);
+    const mediaRecorderRef = useRef(null);
 
     const toggleRecording = () => {
-        setRecording(!recording);
+        if (recording) {
+            stopRecording();
+        } else {
+            startRecording();
+        }
     };
 
-    function RecordAudio() {
-        navigator.mediaDevices
-            .getUserMedia({ audio: true })
-            .then(function onSuccess(stream) {
-                const recorder = new MediaRecorder(stream);
+    const startRecording = async () => {
+        if (recording) return; // Prevents starting the stream if it's already active
 
-                const data = [];
-                recorder.ondataavailable = (e) => {
-                    data.push(e.data);
-                };
-                recorder.start();
-                recorder.onerror = (e) => {
-                    throw e.error || new Error(e.name); // e.name is FF non-spec
-                };
-                recorder.onstop = (e) => {
-                    const audio = document.createElement("audio");
-                    audio.src = window.URL.createObjectURL(new Blob(data));
-                };
-                setTimeout(() => {
-                    rec.stop();
-                }, 5000);
-            })
-            .catch(function onError(error) {
-                console.log(error.message);
+        // Initialize WebSocket connection
+        socketRef.current = new WebSocket("ws://localhost:8000/ws/audio");
+
+        socketRef.current.onopen = async () => {
+            // Capture audio from microphone
+            mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+            mediaRecorderRef.current = new MediaRecorder(mediaStreamRef.current, {
+                mimeType: "audio/webm",
             });
-    }
+
+            mediaRecorderRef.current.ondataavailable = (event) => {
+                if (event.data.size > 0 && socketRef.current.readyState === WebSocket.OPEN) {
+                    socketRef.current.send(event.data);
+                }
+            };
+
+            mediaRecorderRef.current.start(100); // Send data in chunks every 100ms
+            setRecording(true); // Update state to indicate streaming has started
+        };
+
+        socketRef.current.onclose = () => {
+            stopRecording(); // Ensure we clean up if the WebSocket closes unexpectedly
+        };
+    };
+
+    const stopRecording = () => {
+        if (!recording) return; // Prevents stopping if it's not streaming
+
+        // Stop the media recorder and close the WebSocket connection
+        mediaRecorderRef.current?.stop();
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+        socketRef.current?.close();
+
+        // Reset the refs and state
+        mediaRecorderRef.current = null;
+        mediaStreamRef.current = null;
+        socketRef.current = null;
+
+        setRecording(false); // Update state to indicate streaming has stopped
+    };
 
     return (
-        <div className="bg-red-500 h-screen flex items-center">
+        <div className="flex items-center h-screen bg-red-500">
             <button
-                className="bg-green-500 min-w-96 min-h-72 mx-auto flex items-center justify-center text-4xl"
+                className="flex items-center justify-center mx-auto text-4xl bg-green-500 min-w-96 min-h-72"
                 onClick={toggleRecording}
             >
                 {recording ? "STOP" : "PLAY"}
