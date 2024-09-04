@@ -18,7 +18,7 @@ function Home() {
         if (recording) return; // Prevents starting the stream if it's already active
 
         // Initialize WebSocket connection
-        socketRef.current = new WebSocket("ws://localhost:8000/ws/audio");
+        socketRef.current = new WebSocket("ws://localhost:8000/ws");
 
         socketRef.current.onopen = async () => {
             // Capture audio from microphone

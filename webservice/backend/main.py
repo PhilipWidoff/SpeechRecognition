@@ -19,7 +19,9 @@ class ConnectionManager:
     async def broadcast(self, data: bytes):
         # Use the datastream to send to our LLM.
         # await connection.send_bytes(data)
-        whispermodel.process_audio(data)
+        for connection in self.active_connection:
+            transcription = whispermodel.process_audio(data)
+            await connection.send_text(transcription)
 
 
 manager = ConnectionManager()
