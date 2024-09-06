@@ -25,16 +25,18 @@ function Home() {
             mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
 
             mediaRecorderRef.current = new MediaRecorder(mediaStreamRef.current, {
-                mimeType: "audio/webm",
+                mimeType: "audio/webm;codecs=opus",
+                audioBitsPerSecond: "16000",
             });
 
+            // This send blobs to our backend
             mediaRecorderRef.current.ondataavailable = (event) => {
                 if (event.data.size > 0 && socketRef.current.readyState === WebSocket.OPEN) {
                     socketRef.current.send(event.data);
                 }
             };
 
-            mediaRecorderRef.current.start(100); // Send data in chunks every 100ms
+            mediaRecorderRef.current.start(1000); // Send data in chunks every 100ms
             setRecording(true); // Update state to indicate streaming has started
         };
 
