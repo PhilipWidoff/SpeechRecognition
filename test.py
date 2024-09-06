@@ -1,115 +1,122 @@
-# import whisper
-
-# # Load the pre-trained Whisper model
-# model = whisper.load_model("small")
-
-# # Load the audio file and detect the language
-# audio_file = "C:/Users/leons/Downloads/ttsMP3.com_VoiceText_2024-8-28_22-2-54.mp3"
-# result = model.transcribe(audio_file, language=None)
-
-# # Extract and print the detected language
-# detected_language = result['language']
-# print(f"The detected language is: {detected_language}")
-
-
-# import pyaudio
-# import whisper
-# import numpy as np
-
-# p = pyaudio.PyAudio()
-
-# # Whisper model
-# model = whisper.load_model("small")  # Load the base Whisper model
-
-# # Stream parameters
-# FORMAT = pyaudio.paInt16
-# CHANNELS = 1
-# RATE = 16000  # Whisper models are optimized for 16kHz
-# CHUNK = 1024  # Number of frames per buffer
-
-# # Open stream
-# stream = p.open(format=FORMAT,
-#                 channels=CHANNELS,
-#                 rate=RATE,
-#                 input=True,
-#                 frames_per_buffer=CHUNK)
-
-# print("Recording and detecting language in real-time...")
-
-# try:
-#     while True:
-#         # Read audio chunk
-#         audio_chunk = stream.read(CHUNK)
-
-#         # Convert audio chunk to numpy array
-#         audio_np = np.frombuffer(audio_chunk, dtype=np.int16).astype(np.float32) / 32768.0
-
-#         # Run Whisper model on the audio
-#         result = model.transcribe(audio_np, fp16=False, language=None)
-
-#         detected_language = result['language']
-
-#         # Print the detected language
-#         print(f"Detected Language: {detected_language}")
-
-# except KeyboardInterrupt:
-#     print("Stopped recording.")
-
-# finally:
-#     # Stop and close the stream
-#     stream.stop_stream()
-#     stream.close()
-#     p.terminate()
-
-
-
-
-
-# Kör pip install openai-whisper och pip install pyaudio
-
-
 import pyaudio
 import whisper
 import numpy as np
+from googletrans import Translator
+import pyttsx3
+import time
+import tkinter as tk
+from threading import Thread
 
-p = pyaudio.PyAudio()
+# Load the Whisper model
+model = whisper.load_model("small").to("cuda")
 
-model = whisper.load_model("small")
+# Initialize the Google Translate API
+translator = Translator()
 
-# Stream parameters
+# Initialize the text-to-speech engine
+tts_engine = pyttsx3.init()
+
+# PyAudio stream parameters
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 16000
 CHUNK = 1024
 
+# Initialize PyAudio
+p = pyaudio.PyAudio()
+
+# Open audio stream
 stream = p.open(format=FORMAT,
                 channels=CHANNELS,
                 rate=RATE,
                 input=True,
                 frames_per_buffer=CHUNK)
 
-print("Recording and detecting language in real-time...")
+# GUI setup using Tkinter
+root = tk.Tk()
+root.title("Real-Time Transcription and Translation")
 
+# Global variables to control pause and resume
+is_paused = False  # Used to control whether transcription is paused
 accumulated_audio = np.array([], dtype=np.float32)
-seconds_to_accumulate = 5  # Collect 5 seconds of audio. We can change to give it more data to work with
 
-try:
+# GUI elements
+transcribed_text_label = tk.Label(root, text="Transcribed Text", font=("Helvetica", 12))
+transcribed_text_label.pack()
+
+transcribed_text_box = tk.Text(root, height=10, width=50, font=("Helvetica", 12))
+transcribed_text_box.pack()
+
+translated_text_label = tk.Label(root, text="Translated Text", font=("Helvetica", 12))
+translated_text_label.pack()
+
+translated_text_box = tk.Text(root, height=10, width=50, font=("Helvetica", 12))
+translated_text_box.pack()
+
+# Buttons for pause and resume
+pause_button = tk.Button(root, text="Pause", font=("Helvetica", 12), command=lambda: set_pause(True))
+pause_button.pack()
+
+resume_button = tk.Button(root, text="Resume", font=("Helvetica", 12), command=lambda: set_pause(False))
+resume_button.pack()
+
+# Accumulate audio
+seconds_to_accumulate = 5  # Collect 5 seconds of audio
+target_language = "en"  # Specify the target language code, e.g., "es" for Spanish
+
+# Function to control pause/resume
+def set_pause(state):
+    global is_paused
+    is_paused = state
+    if is_paused:
+        print("Transcription paused.")
+    else:
+        print("Transcription resumed.")
+
+def process_audio():
+    global accumulated_audio, is_paused
+
     while True:
-        audio_chunk = stream.read(CHUNK)
-        audio_np = np.frombuffer(audio_chunk, dtype=np.int16).astype(np.float32) / 32768.0
-        accumulated_audio = np.concatenate((accumulated_audio, audio_np))
+        if not is_paused:
+            # Read the audio in chunks and accumulate
+            audio_chunk = stream.read(CHUNK)
+            audio_np = np.frombuffer(audio_chunk, dtype=np.int16).astype(np.float32) / 32768.0
+            accumulated_audio = np.concatenate((accumulated_audio, audio_np))
 
-        if len(accumulated_audio) >= RATE * seconds_to_accumulate:
-            result = model.transcribe(accumulated_audio, fp16=False, language=None)
-            detected_language = result['language']
-            print(f"Detected Language: {detected_language}")
+            if len(accumulated_audio) >= RATE * seconds_to_accumulate:
+                # Process the accumulated audio
+                result = model.transcribe(accumulated_audio, fp16=False, language=None)
+                detected_language = result['language']
+                transcribed_text = result['text']
 
-            accumulated_audio = np.array([], dtype=np.float32)
+                # Clear accumulated audio buffer
+                accumulated_audio = np.array([], dtype=np.float32)
 
-except KeyboardInterrupt:
-    print("Stopped recording.")
+                # Update transcribed text in the GUI
+                transcribed_text_box.delete(1.0, tk.END)
+                transcribed_text_box.insert(tk.END, transcribed_text)
 
-finally:
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
+                # Translate the transcribed text
+                translated = translator.translate(transcribed_text, dest=target_language)
+                translated_text = translated.text
+
+                # Update translated text in the GUI
+                translated_text_box.delete(1.0, tk.END)
+                translated_text_box.insert(tk.END, translated_text)
+
+                # Convert the translated text to speech
+                tts_engine.say(translated_text)
+                tts_engine.runAndWait()
+
+# Run audio processing in a separate thread to avoid blocking the GUI
+audio_thread = Thread(target=process_audio)
+audio_thread.daemon = True
+audio_thread.start()
+
+# Run the Tkinter event loop
+root.mainloop()
+
+# Close the stream when done
+stream.stop_stream()
+stream.close()
+p.terminate()
