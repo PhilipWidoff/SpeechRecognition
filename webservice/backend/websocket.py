@@ -31,7 +31,7 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     while True:
         try:
-            # Here we recieve our blobs as bytes 
+            # Here we recieve our blobs as bytes
             data = await websocket.receive_bytes()
             print(data)
             print(type(data))

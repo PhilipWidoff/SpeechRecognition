@@ -1,100 +1,114 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from "react";
 
 function Home2() {
-  const [isConnected, setIsConnected] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const peerConnection = useRef(null);
-  const webSocket = useRef(null);
+    const [recording, setRecording] = useState(false);
+    // const [linesRecorded, setLinesRecorded] = useState()
+    let fileNumber = 1
+    const mediaStreamRef = useRef(null);
+    const mediaRecorderRef = useRef(null);
+    const audioChunksRef = useRef([]);
+    const recordingIntervalRef = useRef(null);
 
-  useEffect(() => {
-    webSocket.current = new WebSocket('ws://localhost:8000/ws');
-    webSocket.current.onopen = () => console.log('WebSocket connected');
-    webSocket.current.onmessage = handleSignalingMessage;
-
-    return () => {
-      if (webSocket.current) webSocket.current.close();
-      if (peerConnection.current) peerConnection.current.close();
+    const toggleRecording = () => {
+        if (recording) {
+            stopRecording();
+        } else {
+            startRecording();
+        }
     };
-  }, []);
 
-  const handleSignalingMessage = async (event) => {
-    const message = JSON.parse(event.data);
-    if (message.type === 'answer') {
-      const remoteDesc = new RTCSessionDescription(message);
-      await peerConnection.current.setRemoteDescription(remoteDesc);
-    } else if (message.type === 'ice_candidate') {
-      await peerConnection.current.addIceCandidate(message.candidate);
-    }
-  };
+    const startRecording = async () => {
+        if (recording) return;
+        setRecording(true);
+        console.log("Recording started!!");
+        // console.log("State of recording: " + recording)
 
-  const startStreaming = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      peerConnection.current = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-      });
+        audioChunksRef.current = [];
 
-      stream.getTracks().forEach(track => {
-        peerConnection.current.addTrack(track, stream);
-      });
+        mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorderRef.current = new MediaRecorder(mediaStreamRef.current, {
+            mimeType: "audio/webm",
+        });
 
-      peerConnection.current.onicecandidate = (event) => {
-        if (event.candidate) {
-          webSocket.current.send(JSON.stringify({
-            type: 'ice_candidate',
-            candidate: event.candidate
-          }));
+        mediaRecorderRef.current.ondataavailable = (e) => {
+            // console.log(e.data.size);
+            // console.log(e.data);
+            audioChunksRef.current.push(e.data);
+        };
+
+        mediaRecorderRef.current.onstop = () => {
+            console.log("Audio Chunks:", audioChunksRef.current);
+            processAudioChunks();
+            audioChunksRef.current = [];
+        };
+
+        mediaRecorderRef.current.start();
+        recordingIntervalRef.current = setInterval(() => {
+            if (mediaRecorderRef.current.state === "recording") {
+                mediaRecorderRef.current.stop();
+            }
+        }, 5000);
+    };
+
+    // const recordInterval = () => {
+    //     mediaRecorderRef.current.start();
+
+    //     recordingIntervalRef.current = setInterval(() => {
+    //         mediaRecorderRef.current.stop();
+    //         console.log("Audio Chunks:", audioChunksRef.current);
+    //         processAudioChunks()
+    //         audioChunksRef.current = [];
+    //         mediaRecorderRef.current.start(); // Restart recording after resetting
+    //     }, 3000);
+    // };
+
+    const processAudioChunks = async () => {
+        // console.log("processing")
+        if (audioChunksRef.current.length > 0) {
+            const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+            await sendAudio(blob);
+            audioChunksRef.current = [];
+        }        
+        mediaRecorderRef.current.start();
+    };
+
+    const sendAudio = async (audioBlob) => {
+        const formData = new FormData();
+        formData.append("audio", audioBlob, `snippet${fileNumber}.webm`);
+        fileNumber += 1
+        try {
+            await fetch("http://localhost:8000/api/audio/", {  // Address to api
+                method: "POST",
+                body: formData,
+            });
+            console.log("Audio sent to backend");
+        } catch (error) {
+            console.error("Error sending audio:", error);
         }
-      };
+    };
 
-      const offer = await peerConnection.current.createOffer();
-      await peerConnection.current.setLocalDescription(offer);
+    const stopRecording = () => {
+        if (!recording) return;
+        clearInterval(recordingIntervalRef.current);
+        mediaRecorderRef.current?.stop();
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
 
-      webSocket.current.send(JSON.stringify({
-        type: 'offer',
-        sdp: peerConnection.current.localDescription.sdp
-      }));
+        mediaRecorderRef.current = null;
+        mediaStreamRef.current = null;
 
-      setIsConnected(true);
-    } catch (error) {
-      console.error('Error starting stream:', error);
-    }
-  };
+        setRecording(false);
+        console.log("Recording stopped!!");
+    };
 
-  const stopStreaming = () => {
-    if (peerConnection.current) {
-      peerConnection.current.getSenders().forEach(sender => {
-        if (sender.track) sender.track.stop();
-      });
-      peerConnection.current.close();
-    }
-    setIsConnected(false);
-  };
-
-  const toggleMute = () => {
-    if (peerConnection.current) {
-      peerConnection.current.getSenders().forEach(sender => {
-        if (sender.track && sender.track.kind === 'audio') {
-          sender.track.enabled = isMuted;
-        }
-      });
-      setIsMuted(!isMuted);
-    }
-  };
-
-  return (
-    <div className="App">
-      <h1>WebRTC Audio Streaming</h1>
-      {!isConnected ? (
-        <button onClick={startStreaming}>Start Streaming</button>
-      ) : (
-        <>
-          <button onClick={stopStreaming}>Stop Streaming</button>
-          <button onClick={toggleMute}>{isMuted ? 'Unmute' : 'Mute'}</button>
-        </>
-      )}
-    </div>
-  );
+    return (
+        <div className="flex items-center h-screen bg-red-500">
+            <button
+                className="flex items-center justify-center mx-auto text-4xl bg-green-500 min-w-96 min-h-72"
+                onClick={toggleRecording}
+            >
+                {recording ? "STOP" : "PLAY"}
+            </button>
+        </div>
+    );
 }
-
 export default Home2;
