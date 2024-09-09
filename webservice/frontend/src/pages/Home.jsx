@@ -5,6 +5,8 @@ function Home() {
     const socketRef = useRef(null);
     const mediaStreamRef = useRef(null);
     const mediaRecorderRef = useRef(null);
+    const recordingIntervalRef = useRef(null);
+
 
     const toggleRecording = () => {
         if (recording) {
@@ -19,16 +21,18 @@ function Home() {
 
         // Initialize WebSocket connection
         socketRef.current = new WebSocket("ws://localhost:8000/ws");
-
+        
         socketRef.current.onopen = async () => {
             // Capture audio from microphone
             mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-
+            
             mediaRecorderRef.current = new MediaRecorder(mediaStreamRef.current, {
                 mimeType: "audio/webm;codecs=opus",
                 audioBitsPerSecond: "16000",
             });
-
+            setRecording(true); // Update state to indicate streaming has started
+            console.log("Connected and recording")
+            
             // This send blobs to our backend
             mediaRecorderRef.current.ondataavailable = (event) => {
                 if (event.data.size > 0 && socketRef.current.readyState === WebSocket.OPEN) {
@@ -36,8 +40,17 @@ function Home() {
                 }
             };
 
-            mediaRecorderRef.current.start(1000); // Send data in chunks every 100ms
-            setRecording(true); // Update state to indicate streaming has started
+            mediaRecorderRef.current.onstop = () => {
+                console.log("New chunk!!")
+                mediaRecorderRef.current.start()
+            }
+            
+            mediaRecorderRef.current.start(); // Send data in chunks every 100ms
+            recordingIntervalRef.current = setInterval(() => {
+                if (mediaRecorderRef.current.state === "recording") {
+                    mediaRecorderRef.current.stop();
+                }
+            }, 5000)
         };
 
         socketRef.current.onclose = () => {
@@ -49,6 +62,7 @@ function Home() {
         if (!recording) return; // Prevents stopping if it's not streaming
 
         // Stop the media recorder and close the WebSocket connection
+        clearInterval(recordingIntervalRef.current)
         mediaRecorderRef.current?.stop();
         mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
         socketRef.current?.close();
@@ -59,6 +73,7 @@ function Home() {
         socketRef.current = null;
 
         setRecording(false); // Update state to indicate streaming has stopped
+        console.log("Stopping recording!")
     };
 
     return (

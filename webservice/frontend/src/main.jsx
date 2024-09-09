@@ -6,6 +6,6 @@ import Home2 from './pages/Home2.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <Home2 />
+    <Home />
   </StrictMode>,
 )
