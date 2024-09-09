@@ -67,7 +67,7 @@ function Home2() {
         formData.append("audio", audioBlob, `snippet${fileNumber}.webm`);
         fileNumber += 1;
         try {
-            const response = await fetch("http://localhost:8000/api/transcribe/", {
+            const response = await fetch("http://localhost:8000/api/transcribe", {
                 // Address to api
                 method: "POST",
                 body: formData,
