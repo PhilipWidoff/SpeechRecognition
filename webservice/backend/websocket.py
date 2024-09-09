@@ -28,7 +28,8 @@ app.add_middleware(
 async def process_audio(datastream):
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
-        temp_audio.write(datastream)
+        for chunk in datastream:
+            temp_audio.write(chunk)
         temp_audio_path = temp_audio.name
     start = time()
     results = model.transcribe(temp_audio_path)
@@ -40,17 +41,16 @@ async def process_audio(datastream):
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
+    audio_chunks = []
     while True:
         try:
             # Here we recieve our blobs as bytes
             data = await websocket.receive_bytes()
-            # print(data)
-            # print(len(data))
-            # print(type(data))
-            transcription = await process_audio(data)
-            print(transcription)
-            # await websocket.send_text(f"Transcription: {transcription}")
-
+            audio_chunks.append(data)
+            print(len(audio_chunks))
+            transcription = await process_audio(audio_chunks)
+            print(transcription["text"])
+            await websocket.send_text(transcription["text"])
         except WebSocketDisconnect as e:
             print(e)
             break
