@@ -21,12 +21,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# I have rewritten this function a million times but still get encoding errors
-# See whispermodel.py for encoding examples.
+
+## Add gpu to make whisper model go brrrr
+def connect_gpu():
+    ...
 
 
 async def process_audio(datastream):
-
     with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
         for chunk in datastream:
             temp_audio.write(chunk)
@@ -50,6 +51,10 @@ async def websocket_endpoint(websocket: WebSocket):
             print(len(audio_chunks))
             transcription = await process_audio(audio_chunks)
             print(transcription["text"])
+
+            ## Translation
+            ## Eventual send new json to frontend
+
             await websocket.send_text(transcription["text"])
         except WebSocketDisconnect as e:
             print(e)
