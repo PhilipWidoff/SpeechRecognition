@@ -6,7 +6,7 @@ function Home() {
     const mediaStreamRef = useRef(null);
     const mediaRecorderRef = useRef(null);
     const recordingIntervalRef = useRef(null);
-    const [currentDialogue, setCurrentDialogue] = useState("")
+    const [currentDialogue, setCurrentDialogue] = useState("");
 
     const toggleRecording = () => {
         if (recording) {
@@ -33,7 +33,7 @@ function Home() {
             setRecording(true); // Update state to indicate streaming has started
             console.log("Connected and recording");
 
-            // This send blobs to our backend
+            // This send our audio data to our backend
             mediaRecorderRef.current.ondataavailable = (event) => {
                 if (event.data.size > 0 && socketRef.current.readyState === WebSocket.OPEN) {
                     socketRef.current.send(event.data);
@@ -53,10 +53,10 @@ function Home() {
             }, 5000);
         };
 
-        socketRef.current.addEventListener("message", event => {
-            console.log(event.data)
-            setCurrentDialogue(event.data)
-        })
+        socketRef.current.addEventListener("message", (event) => {
+            console.log(event.data);
+            setCurrentDialogue(event.data);
+        });
 
         socketRef.current.onclose = () => {
             stopRecording(); // Ensure we clean up if the WebSocket closes unexpectedly

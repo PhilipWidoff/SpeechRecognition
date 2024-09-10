@@ -10,7 +10,6 @@ from time import time
 
 model = whisper.load_model("base")
 
-
 app = FastAPI()
 
 app.add_middleware(
@@ -45,15 +44,18 @@ async def websocket_endpoint(websocket: WebSocket):
     audio_chunks = []
     while True:
         try:
-            # Here we recieve our blobs as bytes
+            # Here we recieve our audio as bytes
             data = await websocket.receive_bytes()
             audio_chunks.append(data)
             print(len(audio_chunks))
+
+            ## Potentially use some noice reduction
+
             transcription = await process_audio(audio_chunks)
             print(transcription["text"])
 
             ## Translation
-            ## Eventual send new json to frontend
+            ## Eventually send new json to frontend
 
             await websocket.send_text(transcription["text"])
         except WebSocketDisconnect as e:
