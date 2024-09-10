@@ -1,10 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import whisper
-import io
-import numpy as np
-import asyncio
-from pydub import AudioSegment
 import tempfile
 from time import time
 
