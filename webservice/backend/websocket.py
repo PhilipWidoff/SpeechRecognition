@@ -40,11 +40,11 @@ device = connect_gpu()
 model = whisper.load_model("base").to(device=device)
 
 
-def translate_text(text: str) -> str:
-    target_language = "ar"  # Change this to your target language code
-    translated = translator.translate(text, dest=target_language)
-    translated_text = translated.text
-    return translated_text
+# def translate_text(text: str) -> str:
+#     target_language = "ar"  # Change this to your target language code
+#     translated = translator.translate(text, dest=target_language)
+#     translated_text = translated.text
+#     return translated_text
 
 
 def compile_json(transcription: str, translation: str, detected_lang: str) -> dict:
@@ -78,11 +78,12 @@ async def websocket_endpoint(websocket: WebSocket):
 
             transcription = await process_audio(audio_chunks)
             print(transcription["text"])
+            print(transcription["language"])
 
             # Translation
-            translated_text = translate_text(text=transcription["text"])
+            # translated_text = translate_text(text=transcription["text"])
 
-            print(translated_text)
+            # print(translated_text)
             # Eventually send new json to frontend
             # compile_json(
             #     transcription=transcription["text"], translation=translated_text, detected_lang=transcription["language"])
@@ -90,6 +91,7 @@ async def websocket_endpoint(websocket: WebSocket):
             # await websocket.send_json()
 
             await websocket.send_text(transcription["text"])
+            await websocket.send_text(transcription["language"])
         except WebSocketDisconnect as e:
             print(e)
             break
