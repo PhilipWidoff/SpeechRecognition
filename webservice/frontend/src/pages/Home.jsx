@@ -1,4 +1,5 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 function Home() {
     const [recording, setRecording] = useState(false);
@@ -7,59 +8,45 @@ function Home() {
     const mediaRecorderRef = useRef(null);
     const recordingIntervalRef = useRef(null);
     const [currentDialogue, setCurrentDialogue] = useState("");
-    const [detectedLanguage, setDetectedLanguage] = useState("");  // New state for detected language
-    const [translatedText, setTranslatedText] = useState(""); // New state for the second box
 
-    // Dropdown state
-    const [isOpen, setIsOpen] = useState(false);
-    const [selectedOption, setSelectedOption] = useState('Choose a language');
-    const options = ['English', 'Spanish', 'Mandarin', 'French', 'German',
-         'Portuguese', 'Russian', 'Japanese', 'Arabic', 'Hindi', 'Korean',
-        'Italian', 'Turkish', 'Dutch', 'Swedish'];
-
-
-    const toggleDropdown = () => setIsOpen(!isOpen);
-
-    const handleOptionClick = (option) => {
-        setSelectedOption(option);
-        setIsOpen(false);
-    };
-
-    const toggleRecording = () => {
-        if (recording) {
-            stopRecording();
-        } else {
-            startRecording();
-        }
-    };
+  const toggleRecording = () => {
+    if (recording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
 
     const startRecording = async () => {
-        if (recording) return;
+        if (recording) return; // Prevents starting the stream if it's already active
 
+        // Initialize WebSocket connection
         socketRef.current = new WebSocket("ws://localhost:8000/ws");
 
         socketRef.current.onopen = async () => {
+            // Capture audio from microphone
             mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
 
             mediaRecorderRef.current = new MediaRecorder(mediaStreamRef.current, {
                 mimeType: "audio/webm;codecs=opus",
                 audioBitsPerSecond: "16000",
             });
-            setRecording(true);
+            setRecording(true); // Update state to indicate streaming has started
             console.log("Connected and recording");
 
+            // This send our audio data to our backend
             mediaRecorderRef.current.ondataavailable = (event) => {
                 if (event.data.size > 0 && socketRef.current.readyState === WebSocket.OPEN) {
                     socketRef.current.send(event.data);
                 }
             };
 
-            mediaRecorderRef.current.onstop = () => {
-                console.log("New chunk!!");
-                mediaRecorderRef.current.start();
-            };
+      mediaRecorderRef.current.onstop = () => {
+        console.log("New chunk!!");
+        mediaRecorderRef.current.start();
+      };
 
-            mediaRecorderRef.current.start();
+            mediaRecorderRef.current.start(); // Send data in chunks every 100ms
             recordingIntervalRef.current = setInterval(() => {
                 if (mediaRecorderRef.current.state === "recording") {
                     mediaRecorderRef.current.stop();
@@ -67,98 +54,45 @@ function Home() {
             }, 5000);
         };
 
-        socketRef.current.addEventListener("message", (event) => {
-            console.log(event.data);
-            setCurrentDialogue(event.data);
-        });
+    socketRef.current.addEventListener("message", (event) => {
+      console.log(event.data);
+      setCurrentDialogue(event.data);
+    });
 
         socketRef.current.onclose = () => {
-            stopRecording();
+            stopRecording(); // Ensure we clean up if the WebSocket closes unexpectedly
         };
     };
 
     const stopRecording = () => {
-        if (!recording) return;
+        if (!recording) return; // Prevents stopping if it's not streaming
 
+        // Stop the media recorder and close the WebSocket connection
         clearInterval(recordingIntervalRef.current);
         mediaRecorderRef.current?.stop();
         mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
         socketRef.current?.close();
 
+        // Reset the refs and state
         recordingIntervalRef.current = null;
         mediaRecorderRef.current = null;
         mediaStreamRef.current = null;
         socketRef.current = null;
 
-        setRecording(false);
+        setRecording(false); // Update state to indicate streaming has stopped
         console.log("Stopping recording!");
     };
 
-    const onTranslate = () => {
-        console.log("Translate button clicked!");
-        // Simulate translation and display in the new box
-        setTranslatedText("This is the translated text");
-    };
-
     return (
-        <div className="flex flex-col items-center justify-center h-screen bg-red-500">
-            {/* Dropdown */}
-            <div className="relative w-[1280px] mb-8">
+        <div className="flex items-center h-screen bg-red-500 ">
+            <div className="flex justify-evenly mx-auto w-[1280px]">
                 <button
-                    onClick={toggleDropdown}
-                    className="w-64 mx-auto flex items-center justify-between bg-white p-3 text-lg font-normal rounded-lg shadow-md"
+                    className="flex items-center justify-center text-4xl bg-green-500 rounded-lg shadow-md shadow-black min-w-96 min-h-72"
+                    onClick={toggleRecording}
                 >
-                    <span>{selectedOption}</span>
-                    <span className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+                    {recording ? "STOP" : "PLAY"}
                 </button>
-                {isOpen && (
-                    <ul className="absolute left-1/2 transform -translate-x-1/2 w-64 mt-2 py-2 bg-white rounded-lg shadow-lg z-10">
-                        {options.map((option, index) => (
-                            <li
-                                key={index}
-                                onClick={() => handleOptionClick(option)}
-                                className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                            >
-                                {option}
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </div>
-
-            {/* Existing boxes and buttons */}
-            <div className="flex justify-evenly w-[1280px]">
-                <div className="flex flex-col items-center">
-                    <button
-                        className="flex items-center justify-center text-4xl bg-green-500 rounded-lg shadow-md shadow-black min-w-96 min-h-72"
-                        onClick={toggleRecording}
-                    >
-                        {recording ? "STOP" : "PLAY"}
-                    </button>
-
-                    {/* New Translate button */}
-                    <button
-                        className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-md"
-                        onClick={onTranslate}
-                    >
-                        Translate
-                    </button>
-                </div>
-
-                {/* Text boxes vertically aligned and same size */}
-                <div className="flex flex-col items-center space-y-4 mt-4">
-                    <div className="bg-gray-200 border-2 border-black rounded-lg w-72 h-48 flex items-center justify-center p-4">
-                        {currentDialogue}
-                    </div>
-
-
-                    <div className="bg-gray-200 border-2 border-black rounded-lg w-72 h-48 flex items-center justify-center p-4">
-                        {translatedText}
-                    </div>
-                </div>
-                <div className="text-white text-lg mt-2">
-                        Detected Language: {detectedLanguage}
-                    </div>
+                <div className="bg-gray-200 border-2 border-black rounded-lg w-72">{currentDialogue}</div>
             </div>
         </div>
     );
