@@ -7,7 +7,7 @@ function AudioAnalyze() {
     const analyserRef = useRef(null);
     const dataArrayRef = useRef(null);
     const mediaStreamRef = useRef(null);
-    let rafId;
+    const rafIdRef = useRef(null);
 
     const toggleRecording = () => {
         if (recording) {
@@ -40,7 +40,7 @@ function AudioAnalyze() {
         const maxLevel = Math.max(...dataArrayRef.current);
         console.log(maxLevel)
         setAudioLevel(maxLevel);
-        rafId = requestAnimationFrame(analyzeAudio);
+        rafIdRef.current = requestAnimationFrame(analyzeAudio);
     };
 
     const stopRecording = () => {
@@ -50,7 +50,7 @@ function AudioAnalyze() {
         if (audioContextRef.current) {
             audioContextRef.current.close();
         }
-        cancelAnimationFrame(rafId);
+        cancelAnimationFrame(rafIdRef.current);
         setRecording(false);
         setAudioLevel(0);
     };
@@ -63,7 +63,7 @@ function AudioAnalyze() {
             if (audioContextRef.current) {
                 audioContextRef.current.close();
             }
-            cancelAnimationFrame(rafId);
+            cancelAnimationFrame(rafIdRef.current);
         };
     }, []);
 

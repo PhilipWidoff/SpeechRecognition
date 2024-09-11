@@ -79,10 +79,10 @@ async def websocket_endpoint(websocket: WebSocket):
             transcription = await process_audio(audio_chunks)
             print(transcription["text"])
 
-            # Translation
-            translated_text = translate_text(text=transcription["text"])
+            # # Translation
+            # translated_text = translate_text(text=transcription["text"])
 
-            print(translated_text)
+            # print(translated_text)
             # Eventually send new json to frontend
             # compile_json(
             #     transcription=transcription["text"], translation=translated_text, detected_lang=transcription["language"])
@@ -90,6 +90,7 @@ async def websocket_endpoint(websocket: WebSocket):
             # await websocket.send_json()
 
             await websocket.send_text(transcription["text"])
+            await websocket.send_text("TEST")
         except WebSocketDisconnect as e:
             print(e)
             break

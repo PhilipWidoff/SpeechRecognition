@@ -45,17 +45,16 @@ function Home() {
                 mediaRecorderRef.current.start();
             };
 
-            mediaRecorderRef.current.start(); // Send data in chunks every 100ms
+            mediaRecorderRef.current.start();
             recordingIntervalRef.current = setInterval(() => {
                 if (mediaRecorderRef.current.state === "recording") {
                     mediaRecorderRef.current.stop();
                 }
             }, 5000);
         };
-
         socketRef.current.addEventListener("message", (event) => {
             console.log(event.data);
-            setCurrentDialogue(event.data);
+            // setCurrentDialogue(event.data);
         });
 
         socketRef.current.onclose = () => {

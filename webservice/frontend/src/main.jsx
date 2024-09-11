@@ -6,6 +6,6 @@ import AudioAnalyze from './pages/AudioAnalyze.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <AudioAnalyze />
+    <Home />
   </StrictMode>,
 )
