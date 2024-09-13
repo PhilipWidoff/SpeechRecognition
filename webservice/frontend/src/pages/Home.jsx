@@ -8,28 +8,27 @@ function Home() {
   const mediaRecorderRef = useRef(null);
   const recordingIntervalRef = useRef(null);
   const [currentDialogue, setCurrentDialogue] = useState("");
-  const [translatedText, setTranslatedText] = useState("");
+  const [translatedText, setTranslatedText] = useState(""); // Translation state
   const [detectedLanguage, setDetectedLanguage] = useState("");
-
-  // Language selection state
-  const [isOpen, setIsOpen] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState("English");
+  const [audioSrc, setAudioSrc] = useState(""); // To store and play TTS audio
+  const [selectedLanguage, setSelectedLanguage] = useState("English"); // Initialize selectedLanguage with a default value
+  const [isOpen, setIsOpen] = useState(false); // Manage dropdown open state
   const languages = [
-    "English",
-    "Spanish",
-    "Mandarin",
-    "French",
-    "German",
-    "Portuguese",
-    "Russian",
-    "Japanese",
-    "Arabic",
-    "Hindi",
-    "Korean",
-    "Italian",
-    "Turkish",
-    "Dutch",
-    "Swedish",
+    { label: "English", code: "en" },
+    { label: "Spanish", code: "es" },
+    { label: "Mandarin", code: "zh" },
+    { label: "French", code: "fr" },
+    { label: "German", code: "de" },
+    { label: "Portuguese", code: "pt" },
+    { label: "Russian", code: "ru" },
+    { label: "Japanese", code: "ja" },
+    { label: "Arabic", code: "ar" },
+    { label: "Hindi", code: "hi" },
+    { label: "Korean", code: "ko" },
+    { label: "Italian", code: "it" },
+    { label: "Turkish", code: "tr" },
+    { label: "Dutch", code: "nl" },
+    { label: "Swedish", code: "sv" },
   ];
   const dropdownRef = useRef(null);
 
@@ -46,8 +45,14 @@ function Home() {
   const toggleDropdown = () => setIsOpen(!isOpen);
 
   const handleLanguageSelect = (language) => {
-    setSelectedLanguage(language);
+    setSelectedLanguage(language); // Set the selected language
     setIsOpen(false);
+
+    // Reset WebSocket connection when language changes
+    if (recording) {
+      stopRecording();      // Stop current recording and WebSocket
+      startRecording();     // Start recording with the new language
+    }
   };
 
   const toggleRecording = () => {
@@ -61,50 +66,59 @@ function Home() {
   const startRecording = async () => {
     if (recording) return;
 
+    // Open new WebSocket connection
     socketRef.current = new WebSocket("ws://localhost:8000/ws");
 
     socketRef.current.onopen = async () => {
+      const languageCode = languages.find((lang) => lang.label === selectedLanguage).code;
+      socketRef.current.send(JSON.stringify({ target_language: languageCode })); // Send the selected language to the server
+
       mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({
         audio: true,
       });
 
       mediaRecorderRef.current = new MediaRecorder(mediaStreamRef.current, {
         mimeType: "audio/webm;codecs=opus",
-        audioBitsPerSecond: "16000",
+        audioBitsPerSecond: 16000,
       });
       setRecording(true);
-      console.log("Connected and recording");
 
       mediaRecorderRef.current.ondataavailable = (event) => {
-        if (
-          event.data.size > 0 &&
-          socketRef.current.readyState === WebSocket.OPEN
-        ) {
+        if (event.data.size > 0 && socketRef.current.readyState === WebSocket.OPEN) {
           socketRef.current.send(event.data);
         }
       };
 
-      mediaRecorderRef.current.onstop = () => {
-        console.log("New chunk!!");
-        mediaRecorderRef.current.start();
-      };
-
       mediaRecorderRef.current.start();
+
       recordingIntervalRef.current = setInterval(() => {
         if (mediaRecorderRef.current.state === "recording") {
           mediaRecorderRef.current.stop();
         }
-      }, 5000);
+      }, 5000); // Stop recording every 5 seconds to send audio chunks
     };
 
-    socketRef.current.addEventListener("message", (event) => {
-        const data = JSON.parse(event.data);  // Parse the incoming JSON data
-    
-        // Access the transcription and detected language from the JSON
-        setCurrentDialogue(data.transcription);  // Update the transcription text
-        setDetectedLanguage(data.detected_language);  // Update the detected language
+    // WebSocket message listener for real-time translation and TTS
+    socketRef.current.addEventListener("message", async (event) => {
+      const data = JSON.parse(event.data); // Parse the incoming JSON data
+
+      setCurrentDialogue(data.transcription); // Update the transcription text
+      setDetectedLanguage(data.detected_language); // Update the detected language
+      setTranslatedText(data.translation); // Update the translated text
+
+      // If TTS audio is provided, play it
+      if (data.tts_audio) {
+        const binaryString = window.atob(data.tts_audio);
+        const binaryData = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          binaryData[i] = binaryString.charCodeAt(i);
+        }
+
+        const blob = new Blob([binaryData], { type: "audio/mp3" });
+        const url = URL.createObjectURL(blob);
+        setAudioSrc(url);  // Set the audio source for the player
+      }
     });
-    
 
     socketRef.current.onclose = () => {
       stopRecording();
@@ -115,9 +129,18 @@ function Home() {
     if (!recording) return;
 
     clearInterval(recordingIntervalRef.current);
-    mediaRecorderRef.current?.stop();
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-    socketRef.current?.close();
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+    }
+
+    if (socketRef.current) {
+      socketRef.current.close();
+    }
 
     recordingIntervalRef.current = null;
     mediaRecorderRef.current = null;
@@ -125,48 +148,36 @@ function Home() {
     socketRef.current = null;
 
     setRecording(false);
-    console.log("Stopping recording!");
-  };
-
-  const handleTTS = () => {
-    console.log("TTS button clicked");
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen absolute bottom-0 left-0 right-0 top-0 bg-[radial-gradient(circle_500px_at_50%_200px,#C9EBFF,transparent)] p-4">
+    <div className="flex flex-col items-center justify-center min-h-screen">
       <div className="w-full max-w-4xl">
         <div className="flex justify-center items-start space-x-4">
-          {/* Left column */}
           <div className="flex flex-col items-center w-5/12">
             <div className="w-full flex justify-center mb-4">
               <button
-                className="px-6 py-3 text-xl bg-green-500 text-white rounded-lg shadow-md hover:bg-green-600 transition-colors"
+                className="px-6 py-3 text-xl bg-green-500 text-white rounded-lg shadow-md hover:bg-green-600"
                 onClick={toggleRecording}
               >
                 {recording ? "STOP" : "PLAY"}
               </button>
             </div>
             <div className="mb-2 px-4 py-2 bg-white rounded-lg shadow-md text-base w-1/2 text-center">
-              <span className="font-semibold">Detected: </span>{detectedLanguage}
-              
+              <span className="font-semibold">Detected: </span>
+              {detectedLanguage}
             </div>
             <div className="bg-gray-200 border-2 border-black rounded-lg w-full h-72 p-4 overflow-auto">
               {currentDialogue}
             </div>
-            <p className="mt-2 text-2xl font-semibold text-black">
-              Transcription
-            </p>
+            <p className="mt-2 text-2xl font-semibold">Transcription</p>
           </div>
 
-          {/* Language Selector */}
-          <div
-            className="w-2/12 flex flex-col items-center justify-start pt-8"
-            ref={dropdownRef}
-          >
+          <div className="w-2/12 flex flex-col items-center justify-start pt-8" ref={dropdownRef}>
             <div className="relative w-full">
               <button
                 onClick={toggleDropdown}
-                className="w-full flex items-center justify-between bg-white p-2 text-sm font-normal rounded-lg shadow-lg hover:bg-gray-100 transition-colors"
+                className="w-full flex items-center justify-between bg-white p-2 text-sm font-normal rounded-lg shadow-lg hover:bg-gray-100"
               >
                 <span>{selectedLanguage}</span>
                 {isOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
@@ -176,10 +187,10 @@ function Home() {
                   {languages.map((language, index) => (
                     <button
                       key={index}
-                      onClick={() => handleLanguageSelect(language)}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 transition-colors"
+                      onClick={() => handleLanguageSelect(language.label)}
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
                     >
-                      {language}
+                      {language.label}
                     </button>
                   ))}
                 </div>
@@ -187,26 +198,17 @@ function Home() {
             </div>
           </div>
 
-          {/* Right column */}
           <div className="flex flex-col items-center w-5/12">
-            <div className="w-full flex justify-center mb-4">
-              <button
-                className="px-6 py-3 text-xl bg-blue-500 text-white rounded-lg shadow-md hover:bg-blue-600 transition-colors"
-                onClick={handleTTS}
-              >
-                TTS
-              </button>
-            </div>
-            <div className="mb-2 px-4 py-2 bg-transparent text-base w-full">
-              &nbsp;
-            </div>
+            {audioSrc && (
+              <audio controls autoPlay>
+                <source src={audioSrc} type="audio/mp3" />
+              </audio>
+            )}
+
+            <p className="mt-2 text-2xl font-semibold">Translation</p>
             <div className="bg-gray-200 border-2 border-black rounded-lg w-full h-72 p-4 overflow-auto">
               {translatedText}
             </div>
-            <p className="mt-2 text-2xl font-semibold text-black">
-              Translation
-            </p>
-            
           </div>
         </div>
       </div>
