@@ -37,9 +37,14 @@ function AudioAnalyze() {
 
     const analyzeAudio = () => {
         analyserRef.current.getByteFrequencyData(dataArrayRef.current);
-        const maxLevel = Math.max(...dataArrayRef.current);
-        console.log(maxLevel)
-        setAudioLevel(maxLevel);
+        const dataArray = [...dataArrayRef.current]
+        const sum = dataArray.reduce((acc, val) => acc + val, 0)
+        const avg = sum / dataArray.length
+        console.log(avg)
+
+        // const maxLevel = Math.max(...dataArrayRef.current);
+        // console.log(maxLevel)
+        // setAudioLevel(maxLevel);
         rafIdRef.current = requestAnimationFrame(analyzeAudio);
     };
 
@@ -60,7 +65,7 @@ function AudioAnalyze() {
             if (mediaStreamRef.current) {
                 mediaStreamRef.current.getTracks().forEach((track) => track.stop());
             }
-            if (audioContextRef.current) {
+            if (audioContextRef.current && audioContextRef.current["state"] !== "closed") {
                 audioContextRef.current.close();
             }
             cancelAnimationFrame(rafIdRef.current);
