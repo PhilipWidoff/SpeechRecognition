@@ -125,6 +125,12 @@ function Home() {
                 mediaRecorderRef.current.start(1000);
                 console.log("Voice activated, started recording");
             }
+        
+        // This doesn't really work
+        //----------------------------------------------------------
+        // What happens is audio is not being properly sent when audio threshhold is sent
+        // Also timeout is triggered multiple times as seen in logs
+        //----------------------------------------------------------
         } else if (isActiveRef.current) {
             timeoutRef.current = setTimeout(() => {
                 console.log(mediaRecorderRef.current)
@@ -135,6 +141,7 @@ function Home() {
                 console.log("Voice deactivated, stopped recording");
             }, ACTIVATION_DURATION);
         }
+        //--------------------------------------------------------------
 
         rafIdRef.current = requestAnimationFrame(analyzeAudio);
     };
