@@ -13,7 +13,7 @@ function Home() {
     const rafIdRef = useRef(null);
     const timeoutRef = useRef(null);
 
-    const AUDIO_THRESHOLD = 20; // Threshold for when it counts as speaking
+    const AUDIO_THRESHOLD = 35; // Threshold for when it counts as speaking
     const ACTIVATION_DURATION = 1000; // Time in ms to consider voice as active
 
     const toggleRecording = () => {
@@ -56,10 +56,23 @@ function Home() {
 
             // This send our audio data to our backend
             mediaRecorderRef.current.ondataavailable = (event) => {
-                console.log("Is available");
-                if (socketRef.current && event.data.size > 0 && socketRef.current.readyState === WebSocket.OPEN && isActiveRef.current) {
+                // console.log("Is available");
+                if (
+                    socketRef.current &&
+                    event.data.size > 0 &&
+                    socketRef.current.readyState === WebSocket.OPEN &&
+                    isActiveRef.current
+                ) {
                     socketRef.current.send(event.data);
                     console.log("Data sent");
+                }
+            };
+
+            mediaRecorderRef.current.onstop = () => {
+                if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                    const stopSignal = new Uint8Array([83, 84, 79, 80]);
+                    socketRef.current.send(stopSignal);
+                    console.log("Send EOL");
                 }
             };
 
@@ -117,28 +130,28 @@ function Home() {
 
         // console.log(avg);
         // console.log(mediaRecorderRef.current)
-
+        // console.log(isActiveRef.current);
         if (avg > AUDIO_THRESHOLD) {
-            clearTimeout(timeoutRef.current);
-            if (!isActiveRef.current && mediaRecorderRef.current.state === "inactive") {
-                isActiveRef.current = true;
-                mediaRecorderRef.current.start(1000);
+            isActiveRef.current = true;
+            if (mediaRecorderRef.current.state === "inactive") {
+                mediaRecorderRef.current.start(100);
                 console.log("Voice activated, started recording");
             }
-        
-        // This doesn't really work
-        //----------------------------------------------------------
-        // What happens is audio is not being properly sent when audio threshhold is sent
-        // Also timeout is triggered multiple times as seen in logs
-        //----------------------------------------------------------
+            clearTimeout(timeoutRef.current);
+
+            // This doesn't really work
+            //----------------------------------------------------------
+            // What happens is audio is not being properly sent when audio threshhold is sent
+            // Also timeout is triggered multiple times as seen in logs
+            //----------------------------------------------------------
         } else if (isActiveRef.current) {
+            clearTimeout(timeoutRef.current);
+            isActiveRef.current = false;
             timeoutRef.current = setTimeout(() => {
-                console.log(mediaRecorderRef.current)
-                if (mediaRecorderRef.current) {
+                if (mediaRecorderRef.current.state === "recording") {
                     mediaRecorderRef.current.stop();
+                    console.log("Voice deactivated, stopped recording");
                 }
-                isActiveRef.current = false;
-                console.log("Voice deactivated, stopped recording");
             }, ACTIVATION_DURATION);
         }
         //--------------------------------------------------------------

@@ -37,7 +37,7 @@ def connect_gpu():
 
 device = connect_gpu()
 
-model = whisper.load_model("base").to(device=device)
+model = whisper.load_model("medium").to(device=device)
 
 
 def translate_text(text: str) -> str:
@@ -71,14 +71,18 @@ async def websocket_endpoint(websocket: WebSocket):
         try:
             # Here we recieve our audio as bytes
             data = await websocket.receive_bytes()
-            audio_chunks.append(data)
-            # print(len(audio_chunks)) # Number of chunks processed
+            # print(data)
 
+            # print(len(audio_chunks)) # Number of chunks processed
             # Potentially use some noice reduction
 
-            transcription = await process_audio(audio_chunks)
-            print(transcription["text"])
-
+            if data == b"STOP":
+                transcription = await process_audio(audio_chunks)
+                print(transcription["text"])
+                await websocket.send_text(transcription["text"])
+                audio_chunks = []
+            else:
+                audio_chunks.append(data)
             # # Translation
             # translated_text = translate_text(text=transcription["text"])
 
@@ -89,8 +93,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
             # await websocket.send_json()
 
-            await websocket.send_text(transcription["text"])
-            await websocket.send_text("TEST")
         except WebSocketDisconnect as e:
             print(e)
             break
