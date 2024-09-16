@@ -13,6 +13,7 @@ function Home() {
   const [audioSrc, setAudioSrc] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState("English");
   const [isOpen, setIsOpen] = useState(false);
+  const audioRef = useRef(null);
   const languages = [
     { label: "English", code: "en" },
     { label: "Spanish", code: "es" },
@@ -43,20 +44,22 @@ function Home() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.load();
+      audioRef.current.play();
+    }
+  }, [audioSrc]);
+
   const toggleDropdown = () => setIsOpen(!isOpen);
 
   const handleLanguageSelect = (language) => {
     setSelectedLanguage(language);
     setIsOpen(false);
 
-    // Send the language change control message without stopping recording
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      const languageCode = languages.find((lang) => lang.label === language).code;
-      socketRef.current.send(JSON.stringify({
-        type: "control",
-        action: "change_language",
-        target_language: languageCode
-      }));
+    if (recording) {
+      stopRecording();
+      startRecording();
     }
   };
 
@@ -71,20 +74,21 @@ function Home() {
   const startRecording = async () => {
     if (recording) return;
 
+    console.log("Attempting to connect to WebSocket");
     socketRef.current = new WebSocket("ws://localhost:8000/ws");
 
     socketRef.current.onopen = async () => {
+      console.log("WebSocket connection established");
       const languageCode = languages.find((lang) => lang.label === selectedLanguage).code;
-      socketRef.current.send(JSON.stringify({
-        type: "control",
-        action: "change_language",
-        target_language: languageCode
-      }));
+      console.log(`Sending target language: ${languageCode}`);
+      socketRef.current.send(JSON.stringify({ target_language: languageCode }));
 
       try {
+        console.log("Requesting media access");
         mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({
           audio: true,
         });
+        console.log("Media access granted");
 
         mediaRecorderRef.current = new MediaRecorder(mediaStreamRef.current, {
           mimeType: "audio/webm;codecs=opus",
@@ -94,31 +98,40 @@ function Home() {
 
         mediaRecorderRef.current.ondataavailable = (event) => {
           if (event.data.size > 0 && socketRef.current.readyState === WebSocket.OPEN) {
+            console.log("Sending audio data to server");
             socketRef.current.send(event.data);
           }
         };
 
         mediaRecorderRef.current.start();
 
-        // Send audio chunks every second without stopping the recorder
         recordingIntervalRef.current = setInterval(() => {
           if (mediaRecorderRef.current.state === "recording") {
-            mediaRecorderRef.current.requestData();  // Request data without stopping the recorder
+            mediaRecorderRef.current.stop();
+            mediaRecorderRef.current.start();
           }
-        }, 1000);  // Sending chunks every second
-      } catch (err) {
-        console.error("Error accessing microphone:", err);
+        }, 5000);
+      } catch (error) {
+        console.error("Error accessing media devices:", error);
+        stopRecording();
       }
     };
 
-    socketRef.current.addEventListener("message", async (event) => {
+    socketRef.current.onmessage = async (event) => {
+      console.log("Received message from server");
       const data = JSON.parse(event.data);
 
-      setCurrentDialogue(data.transcription);
-      setDetectedLanguage(data.detected_language);
-      setTranslatedText(data.translation);
+      if (data.transcription) {
+        setCurrentDialogue(data.transcription);
+        setDetectedLanguage(data.detected_language);
+      }
+      
+      if (data.translation) {
+        setTranslatedText(data.translation);
+      }
 
       if (data.tts_audio) {
+        console.log("Received audio data, creating blob");
         const binaryString = window.atob(data.tts_audio);
         const binaryData = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
@@ -128,26 +141,16 @@ function Home() {
         const blob = new Blob([binaryData], { type: "audio/mp3" });
         const url = URL.createObjectURL(blob);
         setAudioSrc(url);
-
-        // Stop the current audio if it's playing
-        if (audio) {
-          audio.pause();
-          setAudio(null);
-        }
-
-        // Auto-play the audio after receiving TTS
-        const newAudio = new Audio(url);
-        newAudio.play();
-        setAudio(newAudio);  // Store the new audio instance
       }
-    });
+    };
 
     socketRef.current.onerror = (error) => {
-      console.error("WebSocket error:", error);
+      console.error("WebSocket Error:", error);
       stopRecording();
     };
 
     socketRef.current.onclose = () => {
+      console.log("WebSocket closed");
       stopRecording();
     };
   };
@@ -155,6 +158,7 @@ function Home() {
   const stopRecording = () => {
     if (!recording) return;
 
+    console.log("Stopping recording");
     clearInterval(recordingIntervalRef.current);
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
@@ -170,57 +174,83 @@ function Home() {
     }
 
     setRecording(false);
+    console.log("Recording stopped");
   };
 
   return (
-    <div className="flex flex-col items-center p-6 bg-gray-100 min-h-screen">
-      <h1 className="text-4xl font-bold text-gray-800 mb-6">Real-time Speech Translation</h1>
+    <div className="flex flex-col items-center justify-center min-h-screen absolute bottom-0 left-0 right-0 top-0 bg-[radial-gradient(circle_500px_at_50%_200px,#C9EBFF,transparent)] p-4">
+      <div className="w-full max-w-4xl">
+        <div className="flex justify-between space-x-4">
+          <div className="flex flex-col items-center w-5/12">
+            <div className="w-full flex justify-center mb-4">
+              <button
+                className="px-6 py-3 text-xl bg-green-500 text-white rounded-lg shadow-md hover:bg-green-600"
+                onClick={toggleRecording}
+              >
+                {recording ? "STOP" : "PLAY"}
+              </button>
+            </div>
+            <div className="mb-2 px-4 py-2 bg-white rounded-lg shadow-md text-base w-1/2 text-center">
+              <span className="font-semibold">Detected: </span>
+              {detectedLanguage}
+            </div>
+          </div>
 
-      <div className="flex items-center mb-8">
-        <button
-          className={`px-6 py-3 text-white rounded-lg font-semibold ${recording ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"}`}
-          onClick={toggleRecording}
-        >
-          {recording ? "Stop Recording" : "Start Recording"}
-        </button>
-
-        <div className="relative ml-4">
-          <button
-            className="px-6 py-3 bg-blue-500 text-white rounded-lg font-semibold flex items-center"
-            onClick={toggleDropdown}
-          >
-            {selectedLanguage}
-            {isOpen ? <ChevronUp className="ml-2" /> : <ChevronDown className="ml-2" />}
-          </button>
-
-          {isOpen && (
-            <ul className="absolute bg-white border rounded-lg shadow-lg mt-2 w-full">
-              {languages.map((lang) => (
-                <li
-                  key={lang.code}
-                  className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                  onClick={() => handleLanguageSelect(lang.label)}
+          <div className="flex flex-col items-center w-5/12">
+            <div className="w-full flex justify-center mb-4" ref={dropdownRef}>
+              <div className="relative w-1/2">
+                <button
+                  onClick={toggleDropdown}
+                  className="w-full flex items-center justify-between bg-white p-2 text-sm font-normal rounded-lg shadow-lg hover:bg-gray-100"
                 >
-                  {lang.label}
-                </li>
-              ))}
-            </ul>
-          )}
+                  <span>{selectedLanguage}</span>
+                  {isOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                </button>
+                {isOpen && (
+                  <div className="absolute left-0 right-0 mt-1 bg-white rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
+                    {languages.map((language, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleLanguageSelect(language.label)}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+                      >
+                        {language.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="mb-2 px-4 py-2 bg-white rounded-lg shadow-md text-base w-1/2 text-center">
+              <span className="font-semibold">Target: </span>
+              {selectedLanguage}
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="w-full max-w-3xl">
-        <h2 className="text-2xl font-semibold text-gray-800 mb-2">Transcription:</h2>
-        <p className="p-4 bg-white rounded-lg shadow-md mb-4">{currentDialogue || "No transcription yet..."}</p>
+        <div className="flex justify-center items-center space-x-4 mt-4">
+          <div className="flex flex-col items-center w-5/12">
+            <div className="bg-gray-200 border-2 border-black rounded-lg w-full h-72 p-4 overflow-auto">
+              {currentDialogue}
+            </div>
+            <p className="mt-2 text-2xl font-semibold">Transcription</p>
+          </div>
 
-        <h2 className="text-2xl font-semibold text-gray-800 mb-2">Detected Language:</h2>
-        <p className="p-4 bg-white rounded-lg shadow-md mb-4">{detectedLanguage || "No language detected..."}</p>
+          <div className="flex flex-col items-center w-5/12">
+            <div className="bg-gray-200 border-2 border-black rounded-lg w-full h-72 p-4 overflow-auto">
+              {translatedText}
+            </div>
+            <p className="mt-2 text-2xl font-semibold">Translation</p>
+          </div>
+        </div>
 
-        <h2 className="text-2xl font-semibold text-gray-800 mb-2">Translated Text:</h2>
-        <p className="p-4 bg-white rounded-lg shadow-md mb-4">{translatedText || "No translation yet..."}</p>
-
-        <h2 className="text-2xl font-semibold text-gray-800 mb-2">Audio Playback:</h2>
-        {audioSrc && <audio src={audioSrc} controls className="w-full" />}
+        {audioSrc && (
+          <div className="flex justify-center mt-4">
+            <audio ref={audioRef} controls key={audioSrc}>
+              <source src={audioSrc} type="audio/mp3" />
+            </audio>
+          </div>
+        )}
       </div>
     </div>
   );
