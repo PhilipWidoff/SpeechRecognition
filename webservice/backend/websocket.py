@@ -3,15 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 import torch
 import whisper
 import tempfile
-from time import time
 from google.cloud import translate_v2 as translate
+from google.cloud import texttospeech
+import base64
 import os
 import json
-from google.cloud import texttospeech
-import io
+import asyncio
 
 # Initialize FastAPI app
 app = FastAPI()
+os.environ["PATH"] += os.pathsep + r"C:\path\to\ffmpeg\bin"
 
 # CORS setup to allow requests from the frontend
 app.add_middleware(
@@ -31,8 +32,6 @@ def connect_gpu():
     if torch.cuda.is_available():
         device = torch.device("cuda")
         print(f"Using GPU: {torch.cuda.get_device_name(0)}")
-        print(f"Total GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
-        print(f"CUDA version: {torch.version.cuda}")
     else:
         device = torch.device("cpu")
         print("No GPU available, using CPU")
@@ -40,15 +39,14 @@ def connect_gpu():
 
 device = connect_gpu()
 
-# Load Whisper model
+# Load Whisper model for transcription
 model = whisper.load_model("base").to(device=device)
 
 # Translate text using Google Cloud Translate
 def translate_text(text: str, target_language: str = "ar") -> str:
     try:
         result = translate_client.translate(text, target_language=target_language)
-        translated_text = result.get('translatedText', 'Translation error')
-        return translated_text
+        return result.get('translatedText', 'Translation error')
     except Exception as e:
         print(f"Translation error: {e}")
         return "Translation error"
@@ -72,9 +70,9 @@ def text_to_speech(text: str, language_code: str = "en-US"):
         print(f"TTS error: {e}")
         return None
 
-# Process audio and perform transcription
+# Process audio and perform transcription using Whisper
 async def process_audio(audio_chunks):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         for chunk in audio_chunks:
             temp_audio.write(chunk)
         temp_audio_path = temp_audio.name
@@ -84,65 +82,57 @@ async def process_audio(audio_chunks):
     return results
 
 # WebSocket endpoint to handle real-time audio streaming
-import base64
-
-# WebSocket endpoint to handle real-time audio streaming
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     audio_chunks = []
-    target_language = "ar"  # Default to Arabic for translation
-
+    target_language = "en"  # Default language
+    
     try:
         while True:
             message = await websocket.receive()
-
-            if "text" in message:
-                data = message["text"]
-                try:
-                    json_data = json.loads(data)
-                    if "target_language" in json_data:
-                        target_language = json_data["target_language"]
-                        print(f"Updated target language to: {target_language}")
-                except json.JSONDecodeError:
-                    print("Invalid JSON received.")
-            elif "bytes" in message:
+            
+            # Check if the message is a control message or audio data
+            if "bytes" in message:
                 audio_chunks.append(message["bytes"])
+                
+                # Process audio once enough chunks are collected
+                if len(audio_chunks) > 5:  # Adjust the chunk size threshold
+                    transcription = await process_audio(audio_chunks)
+                    text = transcription["text"]
+                    language = transcription["language"]
 
-                # Process audio for transcription
-                transcription = await process_audio(audio_chunks)
-                text = transcription["text"]
-                language = transcription["language"]
+                    # Translate the transcription
+                    translated_text = translate_text(text, target_language=target_language)
 
-                # Translate the transcription
-                translated_text = translate_text(text, target_language=target_language)
+                    # Generate TTS audio from the translated text
+                    tts_audio = await asyncio.to_thread(text_to_speech, translated_text, language_code=target_language)
 
-                # Generate TTS audio for the translated text
-                tts_audio = text_to_speech(translated_text, language_code=target_language)
+                    # Encode and send the data back to the client
+                    tts_audio_base64 = base64.b64encode(tts_audio).decode('utf-8') if tts_audio else None
 
-                # Encode the audio content to base64 to send over WebSocket
-                tts_audio_base64 = base64.b64encode(tts_audio).decode('utf-8') if tts_audio else None
+                    await websocket.send_json({
+                        "transcription": text,
+                        "detected_language": language,
+                        "translation": translated_text,
+                        "tts_audio": tts_audio_base64
+                    })
 
-                # Prepare the response with transcription, translation, and TTS audio
-                response = {
-                    "transcription": text,
-                    "translation": translated_text,
-                    "detected_language": language,
-                    "tts_audio": tts_audio_base64
-                }
+                    audio_chunks = []  # Clear after processing
 
-                # Send the response to the frontend
-                await websocket.send_json(response)
-
+            elif "text" in message:
+                # Parse control messages (like changing the target language)
+                try:
+                    data = json.loads(message["text"])
+                    if data["type"] == "control" and data["action"] == "change_language":
+                        target_language = data["target_language"]
+                        await websocket.send_json({"status": "language_changed", "target_language": target_language})
+                except json.JSONDecodeError as e:
+                    print(f"Error parsing message: {e}")
+       
     except WebSocketDisconnect:
-        print("Client disconnected.")
+        print("WebSocket disconnected")
     except Exception as e:
-        print(f"Error during WebSocket communication: {e}")
+        print(f"Error occurred: {e}")
         await websocket.close()
 
-
-    except WebSocketDisconnect:
-        print("Client disconnected.")
-    except Exception as e:
-        print(f"Error during WebSocket communication: {e}")
-        await websocket.close()
