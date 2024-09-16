@@ -120,9 +120,14 @@ function Home() {
       console.log("Received message from server");
       const data = JSON.parse(event.data);
 
-      setCurrentDialogue(data.transcription);
-      setDetectedLanguage(data.detected_language);
-      setTranslatedText(data.translation);
+      if (data.transcription) {
+        setCurrentDialogue(data.transcription);
+        setDetectedLanguage(data.detected_language);
+      }
+      
+      if (data.translation) {
+        setTranslatedText(data.translation);
+      }
 
       if (data.tts_audio) {
         console.log("Received audio data, creating blob");

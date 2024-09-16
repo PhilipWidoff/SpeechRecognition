@@ -114,6 +114,7 @@ async def websocket_endpoint(websocket: WebSocket):
     logger.info("WebSocket connection accepted")
     audio_chunks = []
     target_language = "en"  # Default to English
+    last_translation = ""
 
     try:
         while True:
@@ -167,6 +168,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 logger.debug("Sending response to client")
                 await websocket.send_json(response)
+
+                # Reset audio chunks and update last translation
+                audio_chunks = []
+                last_translation = translated_text
 
     except Exception as e:
         logger.error(f"Error during WebSocket communication: {e}", exc_info=True)
