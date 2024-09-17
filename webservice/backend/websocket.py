@@ -5,6 +5,8 @@ import whisper
 import tempfile
 from time import time
 from googletrans import Translator
+import os
+import ffmpeg
 
 # pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu116
 
@@ -37,7 +39,7 @@ def connect_gpu():
 
 device = connect_gpu()
 
-model = whisper.load_model("medium").to(device=device)
+model = whisper.load_model("base").to(device=device)
 
 
 def translate_text(text: str) -> str:
@@ -50,39 +52,54 @@ def translate_text(text: str) -> str:
 def compile_json(transcription: str, translation: str, detected_lang: str) -> dict:
     ...
 
+def is_valid_audio(file_path):
+    try:
+        probe = ffmpeg.probe(file_path)
+        audio_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'audio'), None)
+        return audio_stream is not None
+    except ffmpeg.Error:
+        return False
 
-async def process_audio(datastream):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
-        for chunk in datastream:
-            temp_audio.write(chunk)
-        temp_audio_path = temp_audio.name
-    start = time()
-    results = model.transcribe(temp_audio_path)
-    end = time()
-    print(f"Took: {end-start} seconds")
+async def process_audio(temp_audio_path):
+    if not is_valid_audio(temp_audio_path):
+        raise ValueError("Invalid or corrupted audio file")
+    try:
+        start = time()
+        results = model.transcribe(temp_audio_path)
+        end = time()
+        print(f"Took: {end-start} seconds")
+    except Exception:
+        results = {"text": "Error"}
+        print("Error: Transcribing failed")
     return results
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    audio_chunks = []
+    temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+
     while True:
         try:
             # Here we recieve our audio as bytes
             data = await websocket.receive_bytes()
-            # print(data)
 
-            # print(len(audio_chunks)) # Number of chunks processed
             # Potentially use some noice reduction
 
             if data == b"STOP":
-                transcription = await process_audio(audio_chunks)
-                print(transcription["text"])
-                await websocket.send_text(transcription["text"])
-                audio_chunks = []
+                temp_audio.flush()
+                temp_audio.close()
+
+                transcription = await process_audio(temp_audio.name)
+                print(transcription)
+                # print(transcription["text"])
+                # await websocket.send_text(transcription["text"])
+
+                os.unlink(temp_audio.name)
+
+                temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
             else:
-                audio_chunks.append(data)
+                temp_audio.write(data)
             # # Translation
             # translated_text = translate_text(text=transcription["text"])
 
