@@ -39,6 +39,10 @@ function Home() {
     const rafIdRef = useRef(null);
     const timeoutRef = useRef(null);
 
+    const AUDIO_THRESHOLD = 40; // Threshold for when it counts as speaking
+    const ACTIVATION_DURATION = 1000; // Time in ms to consider voice as active
+
+
     useEffect(() => {
         function handleClickOutside(event) {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
