@@ -9,6 +9,7 @@ import json
 from google.cloud import translate_v2 as translate
 from google.cloud import texttospeech
 import base64
+from concurrent.futures import ProcessPoolExecutor
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -24,12 +25,11 @@ logger.info(f"Google Cloud API Key Path: {os.getenv('GOOGLE_CLOUD_API_KEY_PATH')
 
 # Initialize FastAPI app
 app = FastAPI()
-os.environ["PATH"] += os.pathsep + r"C:\path\to\ffmpeg\bin"
 
 # CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://192.168.15.253:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,14 +39,26 @@ app.add_middleware(
 translate_client = translate.Client()
 tts_client = texttospeech.TextToSpeechClient()
 
-# Connect to GPU if available, otherwise use CPU
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-logger.info(f"Using device: {device}")
+# Get the number of available GPUs
+num_gpus = torch.cuda.device_count()
+logger.info(f"Number of available GPUs: {num_gpus}")
 
-# Load Whisper model
-logger.info("Loading Whisper model...")
-model = whisper.load_model("base").to(device)
-logger.info("Whisper model loaded successfully")
+# Create a pool of worker processes
+process_pool = ProcessPoolExecutor(max_workers=num_gpus)
+
+def initialize_worker(gpu_id):
+    torch.cuda.set_device(gpu_id)
+    device = torch.device(f"cuda:{gpu_id}")
+    logger.info(f"Worker initialized with GPU {gpu_id}")
+    
+    model = whisper.load_model("base").to(device)
+    logger.info(f"Whisper model loaded on GPU {gpu_id}")
+    
+    return model
+
+# Initialize models on each GPU
+models = [process_pool.submit(initialize_worker, i) for i in range(num_gpus)]
+models = [model.result() for model in models]
 
 def translate_text(text: str, target_language: str) -> str:
     logger.debug(f"Translating text to {target_language}")
@@ -78,8 +90,8 @@ def text_to_speech(text: str, language_code: str):
         logger.error(f"TTS error: {e}", exc_info=True)
         return None
 
-async def process_audio(audio_chunks):
-    logger.debug("Starting audio processing")
+async def process_audio(audio_chunks, gpu_id):
+    logger.debug(f"Starting audio processing on GPU {gpu_id}")
     temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp')
     os.makedirs(temp_dir, exist_ok=True)
     logger.debug(f"Temporary directory: {temp_dir}")
@@ -91,15 +103,15 @@ async def process_audio(audio_chunks):
     logger.debug(f"Temporary audio file created at: {temp_audio_path}")
 
     try:
-        logger.debug("Attempting to transcribe audio")
+        logger.debug(f"Attempting to transcribe audio on GPU {gpu_id}")
         logger.debug(f"Audio file size: {os.path.getsize(temp_audio_path)} bytes")
         logger.debug(f"Audio file exists: {os.path.exists(temp_audio_path)}")
         
-        results = model.transcribe(temp_audio_path)
-        logger.debug("Transcription successful")
+        results = models[gpu_id].transcribe(temp_audio_path)
+        logger.debug(f"Transcription successful on GPU {gpu_id}")
         return results
     except Exception as e:
-        logger.error(f"Transcription error: {e}", exc_info=True)
+        logger.error(f"Transcription error on GPU {gpu_id}: {e}", exc_info=True)
         return None
     finally:
         logger.debug(f"Cleaning up temporary file: {temp_audio_path}")
@@ -116,6 +128,7 @@ async def websocket_endpoint(websocket: WebSocket):
     audio_chunks = []
     target_language = "en"  # Default to English
     last_translation = ""
+    current_gpu = 0  # Initialize GPU counter
 
     try:
         while True:
@@ -143,9 +156,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 audio_chunks.append(message["bytes"])
                 logger.debug(f"Received audio chunk, total chunks: {len(audio_chunks)}")
 
-                transcription = await process_audio(audio_chunks)
+                # Use the current GPU and rotate to the next one
+                gpu_to_use = current_gpu
+                current_gpu = (current_gpu + 1) % num_gpus
+
+                transcription = await process_audio(audio_chunks, gpu_to_use)
                 if not transcription:
-                    logger.warning("Transcription failed, continuing to next chunk")
+                    logger.warning(f"Transcription failed on GPU {gpu_to_use}, continuing to next chunk")
                     continue
 
                 text = transcription["text"]
