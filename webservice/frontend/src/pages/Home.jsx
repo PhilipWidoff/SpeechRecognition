@@ -39,8 +39,8 @@ function Home() {
     const rafIdRef = useRef(null);
     const timeoutRef = useRef(null);
 
-    const AUDIO_THRESHOLD = 30; // Threshold for when it counts as speaking
-    const ACTIVATION_DURATION = 1000; // Time in ms to consider voice as active
+    const AUDIO_THRESHOLD = 35; // Threshold for when it counts as speaking
+    const ACTIVATION_DURATION = 1500; // Time in ms to consider voice as active
 
     useEffect(() => {
         function handleClickOutside(event) {
@@ -89,8 +89,8 @@ function Home() {
 
         // This send our audio data to our backend
         mediaRecorder.ondataavailable = (event) => {
-          console.log(audioChunks.length)
-          console.log("-----------------------------")
+          // console.log(audioChunks.length)
+          // console.log("-----------------------------")
             if (event.data.size > 0) {
                 audioChunks.push(event.data);
             }
@@ -100,7 +100,7 @@ function Home() {
             if (
                 socketRef.current &&
                 socketRef.current.readyState === WebSocket.OPEN &&
-                audioChunks.length > 0
+                audioChunks.length > 5
             ) {
                 const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
                 socketRef.current.send(audioBlob);
