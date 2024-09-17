@@ -9,7 +9,7 @@ import json
 from google.cloud import translate_v2 as translate
 from google.cloud import texttospeech
 import base64
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -39,25 +39,31 @@ app.add_middleware(
 translate_client = translate.Client()
 tts_client = texttospeech.TextToSpeechClient()
 
-# Get the number of available GPUs
-num_gpus = torch.cuda.device_count()
-logger.info(f"Number of available GPUs: {num_gpus}")
+# Check if GPU is available
+use_gpu = torch.cuda.is_available()
+num_gpus = torch.cuda.device_count() if use_gpu else 0
+logger.info(f"GPU available: {use_gpu}, Number of GPUs: {num_gpus}")
 
-# Create a pool of worker processes
-process_pool = ProcessPoolExecutor(max_workers=num_gpus)
+# Create a pool of worker threads
+num_workers = num_gpus if use_gpu else os.cpu_count()
+thread_pool = ThreadPoolExecutor(max_workers=num_workers)
 
-def initialize_worker(gpu_id):
-    torch.cuda.set_device(gpu_id)
-    device = torch.device(f"cuda:{gpu_id}")
-    logger.info(f"Worker initialized with GPU {gpu_id}")
+def initialize_worker(worker_id):
+    if use_gpu:
+        torch.cuda.set_device(worker_id)
+        device = torch.device(f"cuda:{worker_id}")
+        logger.info(f"Worker initialized with GPU {worker_id}")
+    else:
+        device = torch.device("cpu")
+        logger.info(f"Worker initialized with CPU (worker ID: {worker_id})")
     
     model = whisper.load_model("base").to(device)
-    logger.info(f"Whisper model loaded on GPU {gpu_id}")
+    logger.info(f"Whisper model loaded on {'GPU' if use_gpu else 'CPU'} {worker_id}")
     
     return model
 
-# Initialize models on each GPU
-models = [process_pool.submit(initialize_worker, i) for i in range(num_gpus)]
+# Initialize models
+models = [thread_pool.submit(initialize_worker, i) for i in range(num_workers)]
 models = [model.result() for model in models]
 
 def translate_text(text: str, target_language: str) -> str:
@@ -90,8 +96,8 @@ def text_to_speech(text: str, language_code: str):
         logger.error(f"TTS error: {e}", exc_info=True)
         return None
 
-async def process_audio(audio_chunks, gpu_id):
-    logger.debug(f"Starting audio processing on GPU {gpu_id}")
+async def process_audio(audio_chunks, worker_id):
+    logger.debug(f"Starting audio processing on {'GPU' if use_gpu else 'CPU'} {worker_id}")
     temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp')
     os.makedirs(temp_dir, exist_ok=True)
     logger.debug(f"Temporary directory: {temp_dir}")
@@ -103,15 +109,15 @@ async def process_audio(audio_chunks, gpu_id):
     logger.debug(f"Temporary audio file created at: {temp_audio_path}")
 
     try:
-        logger.debug(f"Attempting to transcribe audio on GPU {gpu_id}")
+        logger.debug(f"Attempting to transcribe audio on {'GPU' if use_gpu else 'CPU'} {worker_id}")
         logger.debug(f"Audio file size: {os.path.getsize(temp_audio_path)} bytes")
         logger.debug(f"Audio file exists: {os.path.exists(temp_audio_path)}")
         
-        results = models[gpu_id].transcribe(temp_audio_path)
-        logger.debug(f"Transcription successful on GPU {gpu_id}")
+        results = models[worker_id].transcribe(temp_audio_path)
+        logger.debug(f"Transcription successful on {'GPU' if use_gpu else 'CPU'} {worker_id}")
         return results
     except Exception as e:
-        logger.error(f"Transcription error on GPU {gpu_id}: {e}", exc_info=True)
+        logger.error(f"Transcription error on {'GPU' if use_gpu else 'CPU'} {worker_id}: {e}", exc_info=True)
         return None
     finally:
         logger.debug(f"Cleaning up temporary file: {temp_audio_path}")
@@ -128,7 +134,7 @@ async def websocket_endpoint(websocket: WebSocket):
     audio_chunks = []
     target_language = "en"  # Default to English
     last_translation = ""
-    current_gpu = 0  # Initialize GPU counter
+    current_worker = 0  # Initialize worker counter
 
     try:
         while True:
@@ -156,13 +162,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 audio_chunks.append(message["bytes"])
                 logger.debug(f"Received audio chunk, total chunks: {len(audio_chunks)}")
 
-                # Use the current GPU and rotate to the next one
-                gpu_to_use = current_gpu
-                current_gpu = (current_gpu + 1) % num_gpus
+                # Use the current worker and rotate to the next one
+                worker_to_use = current_worker
+                current_worker = (current_worker + 1) % num_workers
 
-                transcription = await process_audio(audio_chunks, gpu_to_use)
+                transcription = await process_audio(audio_chunks, worker_to_use)
                 if not transcription:
-                    logger.warning(f"Transcription failed on GPU {gpu_to_use}, continuing to next chunk")
+                    logger.warning(f"Transcription failed on {'GPU' if use_gpu else 'CPU'} {worker_to_use}, continuing to next chunk")
                     continue
 
                 text = transcription["text"]
