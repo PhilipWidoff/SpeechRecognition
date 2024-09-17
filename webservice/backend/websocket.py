@@ -162,40 +162,39 @@ async def websocket_endpoint(websocket: WebSocket):
                 audio_chunks.append(message["bytes"])
                 logger.debug(f"Received audio chunk, total chunks: {len(audio_chunks)}")
                 
-                if message["bytes"] == b"STOP":
-                    # Use the current worker and rotate to the next one
-                    worker_to_use = current_worker
-                    current_worker = (current_worker + 1) % num_workers
+                # Use the current worker and rotate to the next one
+                worker_to_use = current_worker
+                current_worker = (current_worker + 1) % num_workers
 
-                    transcription = await process_audio(audio_chunks, worker_to_use)
-                    if not transcription:
-                        logger.warning(f"Transcription failed on {'GPU' if use_gpu else 'CPU'} {worker_to_use}, continuing to next chunk")
-                        continue
+                transcription = await process_audio(audio_chunks, worker_to_use)
+                if not transcription:
+                    logger.warning(f"Transcription failed on {'GPU' if use_gpu else 'CPU'} {worker_to_use}, continuing to next chunk")
+                    continue
 
-                    text = transcription["text"]
-                    detected_language = transcription["language"]
-                    logger.info(f"Detected language: {detected_language}")
-                    logger.info(f"Transcribed text: {text}")
+                text = transcription["text"]
+                detected_language = transcription["language"]
+                logger.info(f"Detected language: {detected_language}")
+                logger.info(f"Transcribed text: {text}")
 
-                    translated_text = translate_text(text, target_language=target_language)
-                    logger.info(f"Translated text: {translated_text}")
+                translated_text = translate_text(text, target_language=target_language)
+                logger.info(f"Translated text: {translated_text}")
 
-                    tts_audio = text_to_speech(translated_text, language_code=target_language)
+                tts_audio = text_to_speech(translated_text, language_code=target_language)
 
-                    tts_audio_base64 = base64.b64encode(tts_audio).decode('utf-8') if tts_audio else None
+                tts_audio_base64 = base64.b64encode(tts_audio).decode('utf-8') if tts_audio else None
 
-                    response = {
-                        "transcription": text,
-                        "translation": translated_text,
-                        "detected_language": detected_language,
-                        "tts_audio": tts_audio_base64
-                    }
+                response = {
+                    "transcription": text,
+                    "translation": translated_text,
+                    "detected_language": detected_language,
+                    "tts_audio": tts_audio_base64
+                }
 
-                    logger.debug("Sending response to client")
-                    await websocket.send_json(response)
+                logger.debug("Sending response to client")
+                await websocket.send_json(response)
 
-                    # Reset audio chunks and update last translation
-                    audio_chunks = []
+                # Reset audio chunks and update last translation
+                audio_chunks = []
 
     except Exception as e:
         logger.error(f"Error during WebSocket communication: {e}", exc_info=True)

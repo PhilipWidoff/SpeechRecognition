@@ -79,6 +79,32 @@ function Home() {
         }
     };
 
+    const createMediaRecorder = (stream) => {
+        const mediaRecorder = new MediaRecorder(stream, {
+            mimeType: "audio/webm",
+            audioBitsPerSecond: 16000,
+        });
+
+        let audioChunks = []; // Creating buffer
+
+        // This send our audio data to our backend
+        mediaRecorderRef.current.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                audioChunks.push(event.data);
+            }
+        };
+
+        mediaRecorderRef.current.onstop = () => {
+            if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && isActiveRef.current && audioChunks.length > 0) {
+                const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+                socketRef.current.send(audioBlob);
+                console.log("Full audio buffer sent");
+            }
+            audioChunks = [];
+        };
+        return mediaRecorder
+    };
+
     const startRecording = async () => {
         if (recording) return;
 
@@ -110,32 +136,7 @@ function Home() {
                 setRecording(true); // Update state to indicate streaming has started
                 console.log("Connected and recording");
 
-                mediaRecorderRef.current = new MediaRecorder(mediaStreamRef.current, {
-                    mimeType: "audio/webm",
-                    audioBitsPerSecond: 16000,
-                });
-
-                // This send our audio data to our backend
-                mediaRecorderRef.current.ondataavailable = (event) => {
-                    // console.log("Is available");
-                    if (
-                        socketRef.current &&
-                        event.data.size > 0 &&
-                        socketRef.current.readyState === WebSocket.OPEN &&
-                        isActiveRef.current
-                    ) {
-                        socketRef.current.send(event.data);
-                        console.log("Data sent");
-                    }
-                };
-
-                mediaRecorderRef.current.onstop = () => {
-                    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-                        const stopSignal = new Uint8Array([83, 84, 79, 80]);
-                        socketRef.current.send(stopSignal);
-                        console.log("Send EOL");
-                    }
-                };
+                mediaRecorderRef.current = createMediaRecorder(mediaStreamRef.current)
 
                 analyzeAudio();
             } catch (error) {
@@ -208,8 +209,6 @@ function Home() {
                 }
             }, ACTIVATION_DURATION);
         }
-        //--------------------------------------------------------------
-
         rafIdRef.current = requestAnimationFrame(analyzeAudio);
     };
 
