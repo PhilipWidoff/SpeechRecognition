@@ -75,7 +75,7 @@ function Home() {
     if (recording) return;
 
     console.log("Attempting to connect to WebSocket");
-    socketRef.current = new WebSocket("ws://localhost:8000/ws");
+    socketRef.current = new WebSocket("ws://192.168.15.253:8000/ws");
 
     socketRef.current.onopen = async () => {
       console.log("WebSocket connection established");
