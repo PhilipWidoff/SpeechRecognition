@@ -42,7 +42,6 @@ function Home() {
     const AUDIO_THRESHOLD = 40; // Threshold for when it counts as speaking
     const ACTIVATION_DURATION = 1000; // Time in ms to consider voice as active
 
-
     useEffect(() => {
         function handleClickOutside(event) {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -112,8 +111,8 @@ function Home() {
                 console.log("Connected and recording");
 
                 mediaRecorderRef.current = new MediaRecorder(mediaStreamRef.current, {
-                    mimeType: "audio/webm;codecs=opus",
-                    audioBitsPerSecond: "16000",
+                    mimeType: "audio/webm",
+                    audioBitsPerSecond: 16000,
                 });
 
                 // This send our audio data to our backend
@@ -184,35 +183,35 @@ function Home() {
     };
 
     const analyzeAudio = () => {
-      analyserRef.current.getByteFrequencyData(dataArrayRef.current);
-      const dataArray = [...dataArrayRef.current];
-      const sum = dataArray.reduce((acc, val) => acc + val, 0);
-      const avg = sum / dataArray.length;
+        analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+        const dataArray = [...dataArrayRef.current];
+        const sum = dataArray.reduce((acc, val) => acc + val, 0);
+        const avg = sum / dataArray.length;
 
-      // console.log(avg);
-      // console.log(mediaRecorderRef.current)
-      // console.log(isActiveRef.current);
-      if (avg > AUDIO_THRESHOLD) {
-          isActiveRef.current = true;
-          if (mediaRecorderRef.current.state === "inactive") {
-              mediaRecorderRef.current.start(100);
-              console.log("Voice activated, started recording");
-          }
-          clearTimeout(timeoutRef.current);
-      } else if (isActiveRef.current) {
-          clearTimeout(timeoutRef.current);
-          isActiveRef.current = false;
-          timeoutRef.current = setTimeout(() => {
-              if (mediaRecorderRef.current.state === "recording") {
-                  mediaRecorderRef.current.stop();
-                  console.log("Voice deactivated, stopped recording");
-              }
-          }, ACTIVATION_DURATION);
-      }
-      //--------------------------------------------------------------
+        // console.log(avg);
+        // console.log(mediaRecorderRef.current)
+        // console.log(isActiveRef.current);
+        if (avg > AUDIO_THRESHOLD) {
+            isActiveRef.current = true;
+            if (mediaRecorderRef.current.state === "inactive") {
+                mediaRecorderRef.current.start(100);
+                console.log("Voice activated, started recording");
+            }
+            clearTimeout(timeoutRef.current);
+        } else if (isActiveRef.current) {
+            clearTimeout(timeoutRef.current);
+            isActiveRef.current = false;
+            timeoutRef.current = setTimeout(() => {
+                if (mediaRecorderRef.current.state === "recording") {
+                    mediaRecorderRef.current.stop();
+                    console.log("Voice deactivated, stopped recording");
+                }
+            }, ACTIVATION_DURATION);
+        }
+        //--------------------------------------------------------------
 
-      rafIdRef.current = requestAnimationFrame(analyzeAudio);
-  };
+        rafIdRef.current = requestAnimationFrame(analyzeAudio);
+    };
 
     const stopRecording = () => {
         if (!recording) return;
@@ -230,8 +229,8 @@ function Home() {
         }
 
         if (audioContextRef.current) {
-          audioContextRef.current.close();
-      }
+            audioContextRef.current.close();
+        }
 
         if (socketRef.current) {
             socketRef.current.close();
@@ -243,16 +242,16 @@ function Home() {
     };
 
     useEffect(() => {
-      return () => {
-          if (mediaStreamRef.current) {
-              mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-          }
-          if (audioContextRef.current) {
-              audioContextRef.current.close();
-          }
-          cancelAnimationFrame(rafIdRef.current);
-      };
-  }, []);
+        return () => {
+            if (mediaStreamRef.current) {
+                mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+            }
+            if (audioContextRef.current) {
+                audioContextRef.current.close();
+            }
+            cancelAnimationFrame(rafIdRef.current);
+        };
+    }, []);
 
     return (
         <div className="flex flex-col items-center justify-center min-h-screen absolute bottom-0 left-0 right-0 top-0 bg-[radial-gradient(circle_500px_at_50%_200px,#C9EBFF,transparent)] p-4">
