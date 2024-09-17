@@ -148,7 +148,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 break
 
             logger.debug(f"Received message type: {message.get('type')}")
-            logger.debug(f"Full message: {message}")
             if message["type"] == "websocket.disconnect":
                 logger.info("Received disconnect message")
                 break
