@@ -161,7 +161,6 @@ async def websocket_endpoint(websocket: WebSocket):
             elif "bytes" in message:
                 audio_chunks.append(message["bytes"])
                 logger.debug(f"Received audio chunk, total chunks: {len(audio_chunks)}")
-                logger.debug(f"Message: {message}")
                 
                 if message["bytes"] == b"STOP":
                     # Use the current worker and rotate to the next one
