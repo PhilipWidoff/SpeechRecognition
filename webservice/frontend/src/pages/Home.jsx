@@ -88,21 +88,26 @@ function Home() {
         let audioChunks = []; // Creating buffer
 
         // This send our audio data to our backend
-        mediaRecorderRef.current.ondataavailable = (event) => {
+        mediaRecorder.ondataavailable = (event) => {
             if (event.data.size > 0) {
                 audioChunks.push(event.data);
             }
         };
 
-        mediaRecorderRef.current.onstop = () => {
-            if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN && isActiveRef.current && audioChunks.length > 0) {
+        mediaRecorder.onstop = () => {
+            if (
+                socketRef.current &&
+                socketRef.current.readyState === WebSocket.OPEN &&
+                isActiveRef.current &&
+                audioChunks.length > 0
+            ) {
                 const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
                 socketRef.current.send(audioBlob);
                 console.log("Full audio buffer sent");
             }
             audioChunks = [];
         };
-        return mediaRecorder
+        return mediaRecorder;
     };
 
     const startRecording = async () => {
@@ -136,7 +141,7 @@ function Home() {
                 setRecording(true); // Update state to indicate streaming has started
                 console.log("Connected and recording");
 
-                mediaRecorderRef.current = createMediaRecorder(mediaStreamRef.current)
+                mediaRecorderRef.current = createMediaRecorder(mediaStreamRef.current);
 
                 analyzeAudio();
             } catch (error) {
