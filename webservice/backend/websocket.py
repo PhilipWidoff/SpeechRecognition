@@ -106,7 +106,7 @@ def text_to_speech(text: str, language_code: str):
         return None
 
 
-async def process_audio(audio_chunks, worker_id):
+async def process_audio(audio, worker_id):
     logger.debug(
         f"Starting audio processing on {'GPU' if use_gpu else 'CPU'} {worker_id}")
     temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp')
@@ -114,8 +114,7 @@ async def process_audio(audio_chunks, worker_id):
     logger.debug(f"Temporary directory: {temp_dir}")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".webm", dir=temp_dir) as temp_audio:
-        for chunk in audio_chunks:
-            temp_audio.write(chunk)
+        temp_audio.write(audio)
         temp_audio_path = temp_audio.name
     logger.debug(f"Temporary audio file created at: {temp_audio_path}")
 
@@ -147,7 +146,6 @@ async def process_audio(audio_chunks, worker_id):
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connection accepted")
-    audio_chunks = []
     target_language = "en"  # Default to English
     last_translation = ""
     current_worker = 0  # Initialize worker counter
@@ -175,15 +173,15 @@ async def websocket_endpoint(websocket: WebSocket):
                     logger.info(
                         f"Updated target language to: {target_language}")
             elif "bytes" in message:
-                audio_chunks.append(message["bytes"])
+                audio = message["bytes"]
                 logger.debug(
-                    f"Received audio chunk, total chunks: {len(audio_chunks)}")
+                    f"Received audio")
 
                 # Use the current worker and rotate to the next one
                 worker_to_use = current_worker
                 current_worker = (current_worker + 1) % num_workers
 
-                transcription = await process_audio(audio_chunks, worker_to_use)
+                transcription = await process_audio(audio, worker_to_use)
                 if not transcription:
                     logger.warning(
                         f"Transcription failed on {'GPU' if use_gpu else 'CPU'} {worker_to_use}, continuing to next chunk")
@@ -213,9 +211,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 logger.debug("Sending response to client")
                 await websocket.send_json(response)
-
-                # Reset audio chunks and update last translation
-                audio_chunks = []
 
     except Exception as e:
         logger.error(
