@@ -11,6 +11,7 @@ from google.cloud import translate_v2 as translate
 from google.cloud import texttospeech
 import base64
 from concurrent.futures import ThreadPoolExecutor
+from time import time
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG,
@@ -61,7 +62,7 @@ def initialize_worker(worker_id):
         device = torch.device("cpu")
         logger.info(f"Worker initialized with CPU (worker ID: {worker_id})")
 
-    model = whisper.load_model("base").to(device)
+    model = whisper.load_model("large").to(device)
     logger.info(
         f"Whisper model loaded on {'GPU' if use_gpu else 'CPU'} {worker_id}")
 
@@ -76,9 +77,11 @@ models = [model.result() for model in models]
 def translate_text(text: str, target_language: str) -> str:
     logger.debug(f"Translating text to {target_language}")
     try:
+        start_time = time()
         result = translate_client.translate(
             text, target_language=target_language, format_="text")
         logger.debug("Translation successful")
+        logger.info(f"Time to translate: {time() - start_time} seconds")
         return result['translatedText']
     except Exception as e:
         logger.error(f"Translation error: {e}", exc_info=True)
@@ -88,6 +91,7 @@ def translate_text(text: str, target_language: str) -> str:
 def text_to_speech(text: str, language_code: str):
     logger.debug(f"Converting text to speech in {language_code}")
     try:
+        start_time = time()
         synthesis_input = texttospeech.SynthesisInput(text=text)
         voice = texttospeech.VoiceSelectionParams(
             language_code=language_code,
@@ -100,6 +104,7 @@ def text_to_speech(text: str, language_code: str):
             input=synthesis_input, voice=voice, audio_config=audio_config
         )
         logger.debug("Text-to-speech conversion successful")
+        logger.info(f"Time to get TTS: {time() - start_time} seconds")
         return response.audio_content
     except Exception as e:
         logger.error(f"TTS error: {e}", exc_info=True)
@@ -119,6 +124,7 @@ async def process_audio(audio, worker_id):
     logger.debug(f"Temporary audio file created at: {temp_audio_path}")
 
     try:
+        start_time = time()
         logger.debug(
             f"Attempting to transcribe audio on {'GPU' if use_gpu else 'CPU'} {worker_id}")
         logger.debug(
@@ -128,6 +134,8 @@ async def process_audio(audio, worker_id):
         results = models[worker_id].transcribe(temp_audio_path)
         logger.debug(
             f"Transcription successful on {'GPU' if use_gpu else 'CPU'} {worker_id}")
+        logger.info(f"Time to transcribe: {time() - start_time} seconds")
+        
         return results
     except Exception as e:
         logger.error(
