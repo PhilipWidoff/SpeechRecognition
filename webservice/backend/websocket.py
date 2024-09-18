@@ -62,7 +62,7 @@ def initialize_worker(worker_id):
         device = torch.device("cpu")
         logger.info(f"Worker initialized with CPU (worker ID: {worker_id})")
 
-    model = whisper.load_model("large").to(device)
+    model = whisper.load_model("larger").to(device)
     logger.info(
         f"Whisper model loaded on {'GPU' if use_gpu else 'CPU'} {worker_id}")
 
