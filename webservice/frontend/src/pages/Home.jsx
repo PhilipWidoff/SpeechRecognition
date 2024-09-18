@@ -7,8 +7,8 @@ function Home() {
     const mediaStreamRef = useRef(null);
     const mediaRecorderRef = useRef(null);
     const recordingIntervalRef = useRef(null);
-    const [currentDialogue, setCurrentDialogue] = useState("");
-    const [translatedText, setTranslatedText] = useState("");
+    const [currentDialogue, setCurrentDialogue] = useState([]);
+    const [translatedText, setTranslatedText] = useState([]);
     const [detectedLanguage, setDetectedLanguage] = useState("");
     const [audioSrc, setAudioSrc] = useState("");
     const [selectedLanguage, setSelectedLanguage] = useState("English");
@@ -140,12 +140,12 @@ function Home() {
             const data = JSON.parse(event.data);
 
             if (data.transcription) {
-                setCurrentDialogue((prev) => prev + " " + data.transcription); // Append transcription
+                setCurrentDialogue((prev) => [...prev, data.transcription]); // Append transcription
                 setDetectedLanguage(data.detected_language);
             }
 
             if (data.translation) {
-                setTranslatedText((prev) => prev + " " + data.translation); // Append translation
+                setTranslatedText((prev) => [...prev, data.translation]); // Append translation
             }
 
             if (data.tts_audio) {
@@ -222,17 +222,17 @@ function Home() {
     };
 
     const handleSaveTranslation = () => {
-        if (translatedText && audioSrc) {
+        if (translatedText.length > 0 && audioSrc) {
             setSavedTranslations((prev) => [
                 ...prev,
-                { text: translatedText, audio: audioSrc, time: new Date().toLocaleString(), volume: 1 },
+                { text: translatedText[translatedText.length - 1], audio: audioSrc, time: new Date().toLocaleString(), volume: 1 },
             ]);
         }
     };
 
     const handleClear = () => {
-        setCurrentDialogue("");
-        setTranslatedText("");
+        setCurrentDialogue([]);
+        setTranslatedText([]);
     };
 
     const handleDeleteTranslation = (index) => {
@@ -300,14 +300,18 @@ function Home() {
                 <div className="flex justify-between space-x-8">
                     <div className="flex flex-col items-center w-5/12 space-y-4">
                         <div className="w-full p-6 overflow-auto bg-white/70 border border-gray-300 rounded-3xl shadow-lg backdrop-blur-lg h-72">
-                            {currentDialogue}
+                            {currentDialogue.map((dialogue, index) => (
+                                <p key={index}>{dialogue}</p>
+                            ))}
                         </div>
                         <p className="text-2xl font-bold text-white">Transcription</p>
                     </div>
 
                     <div className="flex flex-col items-center w-5/12 space-y-4">
                         <div className="w-full p-6 overflow-auto bg-white/70 border border-gray-300 rounded-3xl shadow-lg backdrop-blur-lg h-72">
-                            {translatedText}
+                            {translatedText.map((text, index) => (
+                                <p key={index}>{text}</p>
+                            ))}
                         </div>
                         <div className="flex space-x-4">
                             <button
