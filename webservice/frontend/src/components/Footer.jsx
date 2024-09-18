@@ -5,20 +5,21 @@ function Footer() {
   const authors = ['Kandal', 'Leon', 'Marcus', 'Philip'];
 
   return (
-    <footer className="bg-gray-200 text-gray-800 py-6 mt-8">
+    <footer className="bg-gradient-to-r from-gray-100 to-gray-200 text-gray-600 py-8 mt-auto bg-opacity-90">
       <div className="container mx-auto px-4">
-        <div className="flex flex-col md:flex-row justify-between items-center">
-          <div className="mb-4 md:mb-0">
-            <h3 className="text-lg font-semibold">Project Contributors</h3>
-            <div className="flex flex-wrap justify-center md:justify-start mt-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+          <div>
+            <h3 className="text-l font-bold mb-4">PROJECT CONTRIBUTORS</h3>
+            <div className="flex flex-wrap gap-4">
               {authors.map((author, index) => (
-                <span key={index} className="text-sm text-gray-600 mr-4 mb-2">{author}</span>
+                <span key={index} className="bg-gray-100 bg-opacity-30 px-3 py-1 rounded-full text-sm">
+                  {author}
+                </span>
               ))}
             </div>
           </div>
-          <div className="text-sm text-gray-600">
-            <p>&copy; {currentYear} Speech Recognition.</p>
-            <p className="mt-1">Developed with passion and dedication.</p>
+          <div className="text-right">
+            <p className="text-sm">&copy; {currentYear} Speech Recognition</p>
           </div>
         </div>
       </div>
