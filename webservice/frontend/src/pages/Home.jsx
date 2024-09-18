@@ -32,7 +32,6 @@ function Home() {
     { label: "Swedish", code: "sv" },
   ];
   const dropdownRef = useRef(null);
-  const [audio, setAudio] = useState(null);  // Manage audio playback state
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -79,7 +78,9 @@ function Home() {
 
     socketRef.current.onopen = async () => {
       console.log("WebSocket connection established");
-      const languageCode = languages.find((lang) => lang.label === selectedLanguage).code;
+      const languageCode = languages.find(
+        (lang) => lang.label === selectedLanguage
+      ).code;
       console.log(`Sending target language: ${languageCode}`);
       socketRef.current.send(JSON.stringify({ target_language: languageCode }));
 
@@ -97,7 +98,10 @@ function Home() {
         setRecording(true);
 
         mediaRecorderRef.current.ondataavailable = (event) => {
-          if (event.data.size > 0 && socketRef.current.readyState === WebSocket.OPEN) {
+          if (
+            event.data.size > 0 &&
+            socketRef.current.readyState === WebSocket.OPEN
+          ) {
             console.log("Sending audio data to server");
             socketRef.current.send(event.data);
           }
@@ -125,7 +129,7 @@ function Home() {
         setCurrentDialogue(data.transcription);
         setDetectedLanguage(data.detected_language);
       }
-      
+
       if (data.translation) {
         setTranslatedText(data.translation);
       }
@@ -161,7 +165,10 @@ function Home() {
     console.log("Stopping recording");
     clearInterval(recordingIntervalRef.current);
 
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state === "recording"
+    ) {
       mediaRecorderRef.current.stop();
     }
 
@@ -178,30 +185,35 @@ function Home() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen absolute bottom-0 left-0 right-0 top-0 bg-[radial-gradient(circle_500px_at_50%_200px,#C9EBFF,transparent)] p-4">
-      <div className="w-full max-w-4xl">
-        <div className="flex justify-between space-x-4">
-          <div className="flex flex-col items-center w-5/12">
-            <div className="w-full flex justify-center mb-4">
+    <div className="flex flex-col items-center justify-center min-h-screen absolute bottom-0 left-0 right-0 top-0 bg-[radial-gradient(circle_500px_at_50%_200px,#C9EBFF,transparent)] p-4 font-poppins">
+      <div className="container mx-auto px-4 py-8 rounded-lg">
+        <h1 className="text-4xl font-bold text-center mb-8 text-gray-800">
+          Real-Time Translation
+        </h1>
+        <div className="flex flex-col md:flex-row justify-between space-y-4 md:space-y-0 md:space-x-4">
+          <div className="flex flex-col items-center w-full md:w-1/2">
+            <div className="w-3/4 flex justify-center mb-4">
               <button
-                className="px-6 py-3 text-xl bg-green-500 text-white rounded-lg shadow-md hover:bg-green-600"
+                className="px-6 py-3 text-xl bg-green-500 text-white rounded-lg shadow-md hover:bg-green-600 transition duration-300 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
                 onClick={toggleRecording}
               >
-                {recording ? "STOP" : "PLAY"}
+                {recording ? "STOP" : "START"}
               </button>
             </div>
-            <div className="mb-2 px-4 py-2 bg-white rounded-lg shadow-md text-base w-1/2 text-center">
-              <span className="font-semibold">Detected: </span>
-              {detectedLanguage}
+            <div className="flex justify-center w-full">
+              <div className="mb-2 px-4 py-2 bg-white rounded-lg shadow-md text-base w-1/3 text-center">
+                <span className="font-semibold">Detected: </span>
+                {detectedLanguage}
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-col items-center w-5/12">
-            <div className="w-full flex justify-center mb-4" ref={dropdownRef}>
-              <div className="relative w-1/2">
+          <div className="flex flex-col items-center w-full md:w-1/2">
+            <div className="w-3/4 flex justify-center mb-4" ref={dropdownRef}>
+              <div className="relative w-1/3">
                 <button
                   onClick={toggleDropdown}
-                  className="w-full flex items-center justify-between bg-white p-2 text-sm font-normal rounded-lg shadow-lg hover:bg-gray-100"
+                  className="w-full flex items-center justify-between bg-white p-2 text-sm font-normal rounded-lg shadow-lg hover:bg-gray-100 transition duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
                 >
                   <span>{selectedLanguage}</span>
                   {isOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
@@ -212,7 +224,7 @@ function Home() {
                       <button
                         key={index}
                         onClick={() => handleLanguageSelect(language.label)}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 transition duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
                       >
                         {language.label}
                       </button>
@@ -221,33 +233,45 @@ function Home() {
                 )}
               </div>
             </div>
-            <div className="mb-2 px-4 py-2 bg-white rounded-lg shadow-md text-base w-1/2 text-center">
-              <span className="font-semibold">Target: </span>
-              {selectedLanguage}
+            <div className="flex justify-center w-full">
+              <div className="mb-2 px-4 py-2 bg-white rounded-lg shadow-md text-base w-1/3 text-center">
+                <span className="font-semibold">Target: </span>
+                {selectedLanguage}
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="flex justify-center items-center space-x-4 mt-4">
-          <div className="flex flex-col items-center w-5/12">
-            <div className="bg-gray-200 border-2 border-black rounded-lg w-full h-72 p-4 overflow-auto">
+        <div className="flex flex-col md:flex-row justify-center items-stretch space-y-4 md:space-y-0 md:space-x-4 mt-8">
+          <div className="flex flex-col items-center w-full md:w-1/2">
+            <div className="bg-white border-2 border-gray-300 rounded-lg w-3/4 h-72 p-4 overflow-auto shadow-inner">
               {currentDialogue}
             </div>
-            <p className="mt-2 text-2xl font-semibold">Transcription</p>
+            <p className="mt-2 text-2xl font-semibold text-gray-800">
+              Transcription
+            </p>
           </div>
 
-          <div className="flex flex-col items-center w-5/12">
-            <div className="bg-gray-200 border-2 border-black rounded-lg w-full h-72 p-4 overflow-auto">
+          <div className="flex flex-col items-center w-full md:w-1/2">
+            <div className="bg-white border-2 border-gray-300 rounded-lg w-3/4 h-72 p-4 overflow-auto shadow-inner">
               {translatedText}
             </div>
-            <p className="mt-2 text-2xl font-semibold">Translation</p>
+            <p className="mt-2 text-2xl font-semibold text-gray-800">
+              Translation
+            </p>
           </div>
         </div>
 
         {audioSrc && (
-          <div className="flex justify-center mt-4">
-            <audio ref={audioRef} controls key={audioSrc}>
+          <div className="flex justify-center mt-8">
+            <audio
+              ref={audioRef}
+              controls
+              className="w-3/4 max-w-md"
+              key={audioSrc}
+            >
               <source src={audioSrc} type="audio/mp3" />
+              Your browser does not support the audio element.
             </audio>
           </div>
         )}
